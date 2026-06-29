@@ -9,16 +9,97 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Inter, system-ui, sans-serif; background: #f8f6f1; }
-    @media print { .no-print { display: none !important; } }
-  </style>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Inter,system-ui,sans-serif;background:#f8f6f1;}@media print{.no-print{display:none!important;}}</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-const { useState, useRef } = React;
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// ── SUPABASE CONFIG ──
+const SB_URL = "https://xctsvfqpetrsexftqegb.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhjdHN2ZnFwZXRyc2V4ZnRxZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTkyNTEsImV4cCI6MjA5ODI3NTI1MX0.bWX4N548C2JgkK_mdBsF_7lQbbKmc5olUd_NeqaTVDs";
+
+async function sbFetch(path, opts = {}) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: {
+      "apikey": SB_KEY,
+      "Authorization": `Bearer ${SB_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": opts.prefer || "return=representation",
+      ...opts.headers
+    },
+    ...opts
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+async function loadCandidates() {
+  const rows = await sbFetch("candidates?order=created_at.desc");
+  return rows.map(r => ({
+    id: r.id, name: r.name, gender: r.gender, nationality: r.nationality,
+    visaStatus: r.visa_status, visaExpiry: r.visa_expiry,
+    email: r.email, phone: r.phone, location: r.location,
+    desiredSalary: r.desired_salary, availability: r.availability,
+    currentRole: r.job_title, currentCompany: r.current_company,
+    languages: r.languages || [], skills: r.skills || [],
+    education: r.education || [], experience: r.experience || [],
+    status: r.status, source: r.source, addedDate: r.added_date, notes: r.notes
+  }));
+}
+
+async function saveCandidate(c) {
+  const row = {
+    id: c.id, name: c.name, gender: c.gender, nationality: c.nationality,
+    visa_status: c.visaStatus, visa_expiry: c.visaExpiry,
+    email: c.email, phone: c.phone, location: c.location,
+    desired_salary: c.desiredSalary, availability: c.availability,
+    job_title: c.currentRole, current_company: c.currentCompany,
+    languages: c.languages || [], skills: c.skills || [],
+    education: c.education || [], experience: c.experience || [],
+    status: c.status, source: c.source, added_date: c.addedDate, notes: c.notes
+  };
+  await sbFetch("candidates", {
+    method: "POST", prefer: "resolution=merge-duplicates,return=representation",
+    headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(row)
+  });
+}
+
+async function loadClients() {
+  const rows = await sbFetch("clients?order=created_at.desc");
+  return rows.map(r => ({
+    id: r.id, company: r.company, industry: r.industry, origin: r.origin,
+    hqCountry: r.hq_country, localOffice: r.local_office, status: r.status,
+    feeAgreed: r.fee_agreed, feeSignedDate: r.fee_signed_date,
+    contactName: r.contact_name, contactTitle: r.contact_title,
+    contactEmail: r.contact_email, contactPhone: r.contact_phone,
+    openRoles: r.open_roles, notes: r.notes, addedDate: r.added_date,
+    documents: r.documents || []
+  }));
+}
+
+async function saveClient(c) {
+  const row = {
+    id: c.id, company: c.company, industry: c.industry, origin: c.origin,
+    hq_country: c.hqCountry, local_office: c.localOffice, status: c.status,
+    fee_agreed: c.feeAgreed, fee_signed_date: c.feeSignedDate,
+    contact_name: c.contactName, contact_title: c.contactTitle,
+    contact_email: c.contactEmail, contact_phone: c.contactPhone,
+    open_roles: c.openRoles, notes: c.notes, added_date: c.addedDate,
+    documents: c.documents || []
+  };
+  await sbFetch("clients", {
+    method: "POST",
+    headers: { "Prefer": "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(row)
+  });
+}
 
 const T = {
   navy:"#1a2744",indigo:"#2d4a8a",sky:"#4a7fc1",vermil:"#b5446e",
@@ -43,52 +124,16 @@ const CLIENT_STATUS_COLORS = {
   "Inactive":{bg:"#f5f5f5",text:"#5a6480"}
 };
 
-const SAMPLE_CANDIDATES = [{
-  id:"c001",name:"Yuki Tanaka",gender:"Female",nationality:"Japanese",
-  visaStatus:"Highly Skilled Migrant",visaExpiry:"2026-09-30",
-  email:"y.tanaka@email.com",phone:"+31 6 12345678",location:"Amsterdam",
-  desiredSalary:"€65,000",availability:"2026-08-01",
-  currentRole:"Marketing Manager",currentCompany:"Sony Europe",
-  languages:["Japanese (Native)","English (Fluent)","Dutch (Basic)"],
-  skills:["Brand Strategy","Digital Marketing","Japanese B2B"],
-  status:"Shortlisted",source:"LinkedIn",addedDate:"2026-06-10",
-  notes:"Strong cultural fit. Available Tues/Thurs.",
-  education:[{degree:"BA International Business",school:"Waseda University",year:"2015"}],
-  experience:[
-    {role:"Marketing Manager",company:"Sony Europe",start:"2020-04",end:"Present",description:"Led pan-European campaigns for consumer electronics.",reasonLeaving:"Seeking growth and management role"},
-    {role:"Marketing Coordinator",company:"Mitsui & Co.",start:"2017-06",end:"2020-03",description:"Coordinated trade marketing across Benelux.",reasonLeaving:"Promoted to Sony role"}
-  ]
-}];
-
-const SAMPLE_CLIENTS = [{
-  id:"cl001",company:"Sony Europe B.V.",industry:"Consumer Electronics",
-  origin:"Japanese",hqCountry:"Japan",localOffice:"Amsterdam",
-  status:"Active",feeAgreed:"20%",feeSignedDate:"2026-05-01",
-  contactName:"Kenji Nakamura",contactTitle:"HR Manager",
-  contactEmail:"k.nakamura@sony.com",contactPhone:"+31 20 123 4567",
-  openRoles:"Marketing Manager, Sales Director",
-  notes:"Prefer Japanese-speaking candidates. Decision-making is slow — allow 4 weeks.",
-  addedDate:"2026-05-01",
-  documents:[]
-}];
-
 function uid(){return "x"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function today(){return new Date().toISOString().slice(0,10);}
 
 function Badge({status,colors}){
-  const map=colors||STATUS_COLORS;
-  const c=map[status]||{bg:T.mist,text:T.slate};
+  const c=(colors||STATUS_COLORS)[status]||{bg:T.mist,text:T.slate};
   return <span style={{background:c.bg,color:c.text,padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{status}</span>;
 }
 
 function Btn({children,onClick,variant="primary",disabled,small}){
-  const V={
-    primary:{background:T.navy,color:T.white,border:"none"},
-    accent:{background:T.vermil,color:T.white,border:"none"},
-    ghost:{background:"transparent",color:T.slate,border:`1px solid ${T.sand}`},
-    success:{background:T.green,color:T.white,border:"none"},
-    warn:{background:T.amber,color:T.white,border:"none"}
-  };
+  const V={primary:{background:T.navy,color:T.white,border:"none"},accent:{background:T.vermil,color:T.white,border:"none"},ghost:{background:"transparent",color:T.slate,border:`1px solid ${T.sand}`},success:{background:T.green,color:T.white,border:"none"}};
   return <button onClick={onClick} disabled={disabled} style={{...V[variant],borderRadius:6,cursor:disabled?"not-allowed":"pointer",fontFamily:"Inter,sans-serif",fontWeight:600,opacity:disabled?0.5:1,padding:small?"5px 12px":"9px 18px",fontSize:small?12:13}}>{children}</button>;
 }
 
@@ -115,8 +160,9 @@ Return ONLY the JSON. Nothing else.`;
 
 function App(){
   const [view,setView]=useState("candidates");
-  const [candidates,setCandidates]=useState(SAMPLE_CANDIDATES);
-  const [clients,setClients]=useState(SAMPLE_CLIENTS);
+  const [candidates,setCandidates]=useState([]);
+  const [clients,setClients]=useState([]);
+  const [loading,setLoading]=useState(true);
   const [selected,setSelected]=useState(null);
   const [selectedClient,setSelectedClient]=useState(null);
   const [search,setSearch]=useState("");
@@ -125,14 +171,20 @@ function App(){
   const [form,setForm]=useState(null);
   const [clientForm,setClientForm]=useState(null);
   const [uploading,setUploading]=useState(false);
+  const [saving,setSaving]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem("ltc_api_key")||"");
-  const [sheetId,setSheetId]=useState(()=>localStorage.getItem("ltc_sheet_id")||"");
-  const [sheetKey,setSheetKey]=useState(()=>localStorage.getItem("ltc_sheet_key")||"");
   const [toast,setToast]=useState(null);
   const fileRef=useRef();
   const docRef=useRef();
 
-  function notify(msg,type="ok"){setToast({msg,type});setTimeout(()=>setToast(null),3500);}
+  useEffect(()=>{
+    Promise.all([loadCandidates(),loadClients()])
+      .then(([c,cl])=>{setCandidates(c);setClients(cl);})
+      .catch(e=>notify("Could not connect to database: "+e.message,"err"))
+      .finally(()=>setLoading(false));
+  },[]);
+
+  function notify(msg,type="ok"){setToast({msg,type});setTimeout(()=>setToast(null),4000);}
   function setF(k,v){setForm(f=>({...f,[k]:v}));}
   function setExp(i,k,v){setForm(f=>({...f,experience:f.experience.map((e,j)=>j===i?{...e,[k]:v}:e)}));}
   function setEdu(i,k,v){setForm(f=>({...f,education:f.education.map((e,j)=>j===i?{...e,[k]:v}:e)}));}
@@ -144,13 +196,13 @@ function App(){
     setUploading(true);
     try{
       const isPdf=file.type==="application/pdf";
+      let extracted;
       if(isPdf){
         const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
         const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:PROMPT}]}]})});
         const data=await resp.json();
         if(data.error)throw new Error(data.error.message);
-        const extracted=JSON.parse(data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
-        setForm({id:uid(),...extracted,status:"New",source:"Upload",addedDate:today()});
+        extracted=JSON.parse(data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
       } else {
         const arrayBuffer=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsArrayBuffer(file);});
         const result=await mammoth.extractRawText({arrayBuffer});
@@ -159,9 +211,9 @@ function App(){
         const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:`${PROMPT}\n\nCV TEXT:\n${cvText}`}]})});
         const data=await resp.json();
         if(data.error)throw new Error(data.error.message);
-        const extracted=JSON.parse(data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
-        setForm({id:uid(),...extracted,status:"New",source:"Upload",addedDate:today()});
+        extracted=JSON.parse(data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
       }
+      setForm({id:uid(),...extracted,status:"New",source:"Upload",addedDate:today()});
       setView("editCandidate");
       notify("CV extracted — please review and save");
     }catch(err){
@@ -175,33 +227,49 @@ function App(){
   async function handleClientDoc(file,clientId){
     if(!file)return;
     const reader=new FileReader();
-    reader.onload=e=>{
+    reader.onload=async e=>{
       const doc={id:uid(),name:file.name,type:file.type,size:Math.round(file.size/1024)+"KB",date:today(),data:e.target.result};
-      setClients(prev=>prev.map(c=>c.id===clientId?{...c,documents:[...(c.documents||[]),doc]}:c));
-      if(selectedClient&&selectedClient.id===clientId)setSelectedClient(c=>({...c,documents:[...(c.documents||[]),doc]}));
-      notify(file.name+" uploaded");
+      const updated=clients.map(c=>c.id===clientId?{...c,documents:[...(c.documents||[]),doc]}:c);
+      setClients(updated);
+      const cl=updated.find(c=>c.id===clientId);
+      if(selectedClient?.id===clientId)setSelectedClient(cl);
+      try{await saveClient(cl);notify(file.name+" uploaded");}
+      catch(err){notify("Upload failed: "+err.message,"err");}
     };
     reader.readAsDataURL(file);
   }
 
-  function saveCandidate(){
+  async function handleSaveCandidate(){
     if(!form?.name){notify("Name is required","err");return;}
-    setCandidates(prev=>prev.find(c=>c.id===form.id)?prev.map(c=>c.id===form.id?form:c):[form,...prev]);
-    notify(form.name+" saved");
-    setView("candidates");
+    setSaving(true);
+    try{
+      await saveCandidate(form);
+      setCandidates(prev=>prev.find(c=>c.id===form.id)?prev.map(c=>c.id===form.id?form:c):[form,...prev]);
+      notify(form.name+" saved");
+      setView("candidates");
+    }catch(err){notify("Save failed: "+err.message,"err");}
+    finally{setSaving(false);}
   }
 
-  function saveClient(){
+  async function handleSaveClient(){
     if(!clientForm?.company){notify("Company name is required","err");return;}
-    setClients(prev=>prev.find(c=>c.id===clientForm.id)?prev.map(c=>c.id===clientForm.id?clientForm:c):[clientForm,...prev]);
-    notify(clientForm.company+" saved");
-    setView("clients");
+    setSaving(true);
+    try{
+      await saveClient(clientForm);
+      setClients(prev=>prev.find(c=>c.id===clientForm.id)?prev.map(c=>c.id===clientForm.id?clientForm:c):[clientForm,...prev]);
+      notify(clientForm.company+" saved");
+      setView("clients");
+    }catch(err){notify("Save failed: "+err.message,"err");}
+    finally{setSaving(false);}
   }
 
-  function deleteDoc(clientId,docId){
-    setClients(prev=>prev.map(c=>c.id===clientId?{...c,documents:c.documents.filter(d=>d.id!==docId)}:c));
-    setSelectedClient(c=>({...c,documents:c.documents.filter(d=>d.id!==docId)}));
-    notify("Document removed");
+  async function deleteDoc(clientId,docId){
+    const updated=clients.map(c=>c.id===clientId?{...c,documents:c.documents.filter(d=>d.id!==docId)}:c);
+    setClients(updated);
+    const cl=updated.find(c=>c.id===clientId);
+    setSelectedClient(cl);
+    try{await saveClient(cl);notify("Document removed");}
+    catch(err){notify("Delete failed","err");}
   }
 
   const filteredCandidates=candidates.filter(c=>{
@@ -213,8 +281,6 @@ function App(){
     const q=clientSearch.toLowerCase();
     return !q||[c.company,c.contactName,c.industry,c.origin].some(v=>v?.toLowerCase().includes(q));
   });
-
-  const navItems=[["candidates","📋 Candidates"],["clients","🏢 Clients"],["settings","⚙ Settings"]];
 
   return (
     <div style={{fontFamily:"Inter,system-ui,sans-serif",background:T.ivory,minHeight:"100vh",color:T.ink}}>
@@ -229,16 +295,18 @@ function App(){
           </div>
         </div>
         <div style={{display:"flex",gap:6}}>
-          {navItems.map(([v,label])=>(
-            <button key={v} onClick={()=>setView(v)} style={{background:view===v||view.startsWith(v.replace("candidates","editCandidate").replace("clients","editClient").replace("clients","clientDetail"))?T.indigo:"transparent",color:T.white,border:"none",borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
+          {[["candidates","📋 Candidates"],["clients","🏢 Clients"],["settings","⚙ Settings"]].map(([v,label])=>(
+            <button key={v} onClick={()=>setView(v)} style={{background:view.startsWith(v.slice(0,6))?T.indigo:"transparent",color:T.white,border:"none",borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
           ))}
         </div>
       </div>
 
       {toast&&<div style={{position:"fixed",top:16,right:16,zIndex:9999,background:toast.type==="err"?T.vermil:T.green,color:T.white,padding:"11px 18px",borderRadius:8,fontSize:13,fontWeight:600,boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}>{toast.msg}</div>}
 
+      {loading&&<div style={{textAlign:"center",padding:60,color:T.slate,fontSize:14}}>⏳ Loading from database…</div>}
+
       {/* ── CANDIDATES LIST ── */}
-      {view==="candidates"&&(
+      {!loading&&view==="candidates"&&(
         <div style={{padding:24,maxWidth:1080,margin:"0 auto"}}>
           <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0]);}} onClick={()=>fileRef.current.click()}
             style={{border:`2px dashed ${T.sky}`,borderRadius:10,padding:"22px 20px",textAlign:"center",marginBottom:20,cursor:"pointer",background:uploading?T.mist:T.white}}>
@@ -358,8 +426,8 @@ function App(){
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,paddingTop:16,borderTop:`1px solid ${T.sand}`}}>
             <Btn variant="ghost" onClick={()=>{setView("candidates");setForm(null);}}>Cancel</Btn>
-            <Btn variant="success" onClick={saveCandidate}>Save Candidate</Btn>
-            {form.name&&<Btn variant="accent" onClick={()=>{saveCandidate();const c=form;setTimeout(()=>{setSelected(c);setView("cv");},200);}}>Save & Generate CV</Btn>}
+            <Btn variant="success" onClick={handleSaveCandidate} disabled={saving}>{saving?"Saving…":"Save Candidate"}</Btn>
+            {form.name&&<Btn variant="accent" onClick={async()=>{await handleSaveCandidate();const c=form;setTimeout(()=>{setSelected(c);setView("cv");},300);}} disabled={saving}>Save & Generate CV</Btn>}
           </div>
         </div>
       )}
@@ -406,18 +474,15 @@ function App(){
       )}
 
       {/* ── CLIENTS LIST ── */}
-      {view==="clients"&&(
+      {!loading&&view==="clients"&&(
         <div style={{padding:24,maxWidth:1080,margin:"0 auto"}}>
           <div style={{display:"flex",gap:10,marginBottom:20,alignItems:"center"}}>
             <input value={clientSearch} onChange={e=>setClientSearch(e.target.value)} placeholder="Search clients…" style={{flex:1,minWidth:180,padding:"7px 12px",borderRadius:6,border:`1px solid ${T.sand}`,fontSize:13,outline:"none"}}/>
             <Btn onClick={()=>{setClientForm({id:uid(),status:"Prospect",origin:"Japanese",addedDate:today(),documents:[],openRoles:""});setView("editClient");}}>+ Add Client</Btn>
           </div>
-
-          {/* Stats */}
-          <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
             {Object.entries(CLIENT_STATUS_COLORS).map(([s,c])=>{const n=clients.filter(x=>x.status===s).length;return n>0?<span key={s} style={{background:c.bg,color:c.text,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>{s}: {n}</span>:null;})}
           </div>
-
           <div style={{background:T.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{background:T.navy,color:T.white}}>
@@ -430,12 +495,12 @@ function App(){
                     <td style={{padding:"10px 14px"}}><div style={{fontWeight:700,color:T.navy}}>{c.company}</div><div style={{fontSize:11,color:T.slate}}>{c.industry} · {c.localOffice}</div></td>
                     <td style={{padding:"10px 14px"}}><div>{c.origin}</div><div style={{fontSize:11,color:T.slate}}>HQ: {c.hqCountry}</div></td>
                     <td style={{padding:"10px 14px"}}><div>{c.contactName}</div><div style={{fontSize:11,color:T.slate}}>{c.contactTitle}</div></td>
-                    <td style={{padding:"10px 14px",fontSize:12,color:T.slate,maxWidth:200}}>{c.openRoles||"—"}</td>
+                    <td style={{padding:"10px 14px",fontSize:12,color:T.slate,maxWidth:180}}>{c.openRoles||"—"}</td>
                     <td style={{padding:"10px 14px",fontWeight:600}}>{c.feeAgreed||"—"}</td>
                     <td style={{padding:"10px 14px"}}><Badge status={c.status} colors={CLIENT_STATUS_COLORS}/></td>
                     <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:6}}>
                       <Btn small variant="ghost" onClick={()=>{setClientForm({...c});setView("editClient");}}>Edit</Btn>
-                      <Btn small onClick={()=>{setSelectedClient(c);setView("clientDetail");}}>View</Btn>
+                      <Btn small onClick={()=>{setSelectedClient(clients.find(x=>x.id===c.id));setView("clientDetail");}}>View</Btn>
                     </div></td>
                   </tr>
                 ))}
@@ -463,33 +528,28 @@ function App(){
                 <Field label="HQ Country" value={clientForm.hqCountry} onChange={v=>setCF("hqCountry",v)} placeholder="Japan"/>
               </div>
               <Field label="Local Office (City)" value={clientForm.localOffice} onChange={v=>setCF("localOffice",v)} placeholder="Amsterdam"/>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <Field label="Status" as="select" value={clientForm.status} onChange={v=>setCF("status",v)} options={Object.keys(CLIENT_STATUS_COLORS)}/>
-              </div>
-
+              <Field label="Status" as="select" value={clientForm.status} onChange={v=>setCF("status",v)} options={Object.keys(CLIENT_STATUS_COLORS)}/>
               <SH title="Fee Agreement"/>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <Field label="Agreed Fee %" value={clientForm.feeAgreed} onChange={v=>setCF("feeAgreed",v)} placeholder="20%"/>
                 <Field label="Agreement Signed Date" type="date" value={clientForm.feeSignedDate} onChange={v=>setCF("feeSignedDate",v)}/>
               </div>
-
               <SH title="Notes & Relationship"/>
               <Field label="Notes" as="textarea" value={clientForm.notes} onChange={v=>setCF("notes",v)} placeholder="Culture notes, decision process, preferences…" rows={4}/>
             </div>
             <div>
               <SH title="Main Contact Person"/>
               <Field label="Contact Name" value={clientForm.contactName} onChange={v=>setCF("contactName",v)}/>
-              <Field label="Job Title" value={clientForm.contactTitle} onChange={v=>setCF("contactTitle",v)} placeholder="HR Manager, Office Manager…"/>
+              <Field label="Job Title" value={clientForm.contactTitle} onChange={v=>setCF("contactTitle",v)} placeholder="HR Manager…"/>
               <Field label="Email" type="email" value={clientForm.contactEmail} onChange={v=>setCF("contactEmail",v)}/>
               <Field label="Phone" value={clientForm.contactPhone} onChange={v=>setCF("contactPhone",v)}/>
-
               <SH title="Open Roles / Mandates"/>
-              <Field label="Active Job Openings" as="textarea" value={clientForm.openRoles} onChange={v=>setCF("openRoles",v)} placeholder={"Marketing Manager\nSales Director\nFinance Controller"} rows={4}/>
+              <Field label="Active Job Openings" as="textarea" value={clientForm.openRoles} onChange={v=>setCF("openRoles",v)} placeholder={"Marketing Manager\nSales Director"} rows={4}/>
             </div>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,paddingTop:16,borderTop:`1px solid ${T.sand}`}}>
             <Btn variant="ghost" onClick={()=>{setView("clients");setClientForm(null);}}>Cancel</Btn>
-            <Btn variant="success" onClick={saveClient}>Save Client</Btn>
+            <Btn variant="success" onClick={handleSaveClient} disabled={saving}>{saving?"Saving…":"Save Client"}</Btn>
           </div>
         </div>
       )}
@@ -497,88 +557,49 @@ function App(){
       {/* ── CLIENT DETAIL ── */}
       {view==="clientDetail"&&selectedClient&&(()=>{
         const cl=clients.find(c=>c.id===selectedClient.id)||selectedClient;
-        return (
+        return(
           <div style={{padding:24,maxWidth:900,margin:"0 auto"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
               <Btn variant="ghost" small onClick={()=>setView("clients")}>← Back</Btn>
               <h2 style={{margin:0,fontSize:17,fontWeight:800,color:T.navy}}>{cl.company}</h2>
               <Badge status={cl.status} colors={CLIENT_STATUS_COLORS}/>
-              <div style={{marginLeft:"auto"}}>
-                <Btn small onClick={()=>{setClientForm({...cl});setView("editClient");}}>Edit</Btn>
-              </div>
+              <div style={{marginLeft:"auto"}}><Btn small onClick={()=>{setClientForm({...cl});setView("editClient");}}>Edit</Btn></div>
             </div>
-
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
-              {/* Company info */}
               <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
                 <SH title="Company"/>
                 {[["Industry",cl.industry],["Origin",cl.origin],["HQ Country",cl.hqCountry],["Local Office",cl.localOffice],["Agreed Fee",cl.feeAgreed],["Fee Signed",cl.feeSignedDate]].filter(([,v])=>v).map(([l,v])=>(
                   <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.sand}`,fontSize:13}}>
-                    <span style={{color:T.slate,fontSize:12}}>{l}</span>
-                    <span style={{fontWeight:600}}>{v}</span>
+                    <span style={{color:T.slate,fontSize:12}}>{l}</span><span style={{fontWeight:600}}>{v}</span>
                   </div>
                 ))}
               </div>
-              {/* Contact */}
               <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
                 <SH title="Main Contact"/>
                 {[["Name",cl.contactName],["Title",cl.contactTitle],["Email",cl.contactEmail],["Phone",cl.contactPhone]].filter(([,v])=>v).map(([l,v])=>(
                   <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.sand}`,fontSize:13}}>
-                    <span style={{color:T.slate,fontSize:12}}>{l}</span>
-                    <span style={{fontWeight:600}}>{v}</span>
+                    <span style={{color:T.slate,fontSize:12}}>{l}</span><span style={{fontWeight:600}}>{v}</span>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* Open Roles */}
-            {cl.openRoles&&(
-              <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:20}}>
-                <SH title="Open Roles / Active Mandates"/>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {cl.openRoles.split("\n").filter(Boolean).map((r,i)=>(
-                    <span key={i} style={{background:T.mist,color:T.indigo,borderRadius:20,padding:"4px 14px",fontSize:12,fontWeight:600}}>{r}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            {cl.notes&&(
-              <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:20}}>
-                <SH title="Notes & Relationship"/>
-                <div style={{fontSize:13,color:T.slate,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cl.notes}</div>
-              </div>
-            )}
-
-            {/* Documents / Email Log */}
+            {cl.openRoles&&<div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:20}}><SH title="Open Roles / Active Mandates"/><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{cl.openRoles.split("\n").filter(Boolean).map((r,i)=><span key={i} style={{background:T.mist,color:T.indigo,borderRadius:20,padding:"4px 14px",fontSize:12,fontWeight:600}}>{r}</span>)}</div></div>}
+            {cl.notes&&<div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:20}}><SH title="Notes & Relationship"/><div style={{fontSize:13,color:T.slate,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cl.notes}</div></div>}
             <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                 <div style={{fontSize:11,fontWeight:800,color:T.indigo,textTransform:"uppercase",letterSpacing:"0.1em"}}>📎 Documents & Email Log</div>
-                <div>
-                  <input ref={docRef} type="file" style={{display:"none"}} onChange={e=>handleClientDoc(e.target.files[0],cl.id)}/>
-                  <Btn small onClick={()=>docRef.current.click()}>+ Upload Document</Btn>
-                </div>
+                <div><input ref={docRef} type="file" style={{display:"none"}} onChange={e=>handleClientDoc(e.target.files[0],cl.id)}/><Btn small onClick={()=>docRef.current.click()}>+ Upload</Btn></div>
               </div>
-              <div style={{fontSize:12,color:T.slate,marginBottom:12,background:T.mist,borderRadius:6,padding:"8px 12px"}}>
-                Upload emails (saved as PDF), contracts, proposals, or any correspondence. Acts as your log and backup storage.
-              </div>
-              {(!cl.documents||cl.documents.length===0)&&(
-                <div style={{textAlign:"center",padding:"30px 0",color:T.silver,fontSize:13}}>No documents yet — upload emails or files above</div>
-              )}
+              <div style={{fontSize:12,color:T.slate,marginBottom:12,background:T.mist,borderRadius:6,padding:"8px 12px"}}>Upload emails (as PDF), contracts, proposals, or any correspondence. Stored as backup log.</div>
+              {(!cl.documents||cl.documents.length===0)&&<div style={{textAlign:"center",padding:"24px 0",color:T.silver,fontSize:13}}>No documents yet</div>}
               {(cl.documents||[]).map(doc=>(
                 <div key={doc.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:8,border:`1px solid ${T.sand}`,marginBottom:8,background:T.ivory}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <div style={{fontSize:20}}>{doc.type?.includes("pdf")?"📄":doc.type?.includes("image")?"🖼️":"📎"}</div>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600,color:T.navy}}>{doc.name}</div>
-                      <div style={{fontSize:11,color:T.slate}}>{doc.date} · {doc.size}</div>
-                    </div>
+                    <div><div style={{fontSize:13,fontWeight:600,color:T.navy}}>{doc.name}</div><div style={{fontSize:11,color:T.slate}}>{doc.date} · {doc.size}</div></div>
                   </div>
                   <div style={{display:"flex",gap:8}}>
-                    <a href={doc.data} download={doc.name} style={{textDecoration:"none"}}>
-                      <Btn small variant="ghost">⬇ Download</Btn>
-                    </a>
+                    <a href={doc.data} download={doc.name} style={{textDecoration:"none"}}><Btn small variant="ghost">⬇</Btn></a>
                     <Btn small variant="ghost" onClick={()=>deleteDoc(cl.id,doc.id)}>🗑</Btn>
                   </div>
                 </div>
@@ -592,7 +613,13 @@ function App(){
       {view==="settings"&&(
         <div style={{padding:24,maxWidth:580,margin:"0 auto"}}>
           <h2 style={{color:T.navy,marginBottom:4,fontWeight:800}}>Settings</h2>
-          <p style={{color:T.slate,fontSize:13,marginBottom:20}}>Configure AI extraction and integrations.</p>
+          <p style={{color:T.slate,fontSize:13,marginBottom:20}}>Configure AI extraction and export.</p>
+          <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:16}}>
+            <SH title="🗄 Database"/>
+            <div style={{background:"#e8f5ee",borderRadius:7,padding:"9px 12px",fontSize:12,color:"#1a5c30",lineHeight:1.6}}>
+              ✓ Connected to Supabase — all data is saved permanently and synced across devices.
+            </div>
+          </div>
           <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:16}}>
             <SH title="🤖 Anthropic API Key (Required for CV extraction)"/>
             <div style={{background:"#fff8e8",borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:12,color:"#7a5000",lineHeight:1.6,borderLeft:`3px solid ${T.amber}`}}>
@@ -600,11 +627,6 @@ function App(){
             </div>
             <Field label="API Key" value={apiKey} onChange={v=>{setApiKey(v);localStorage.setItem("ltc_api_key",v);}} placeholder="sk-ant-..."/>
             {apiKey&&<div style={{color:T.green,fontSize:12,fontWeight:600}}>✓ API key set — CV extraction ready</div>}
-          </div>
-          <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:16}}>
-            <SH title="📊 Google Sheets Sync (Optional)"/>
-            <Field label="Spreadsheet ID" value={sheetId} onChange={v=>{setSheetId(v);localStorage.setItem("ltc_sheet_id",v);}} placeholder="From sheet URL: /spreadsheets/d/[ID]/edit"/>
-            <Field label="Google API Key" value={sheetKey} onChange={v=>{setSheetKey(v);localStorage.setItem("ltc_sheet_key",v);}} placeholder="AIza..."/>
           </div>
           <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:16}}>
             <SH title="⬇ Export Data"/>
@@ -624,7 +646,6 @@ function App(){
               }}>⬇ Clients CSV</Btn>
             </div>
           </div>
-          <Btn variant="success" onClick={()=>notify("Settings saved")}>Save Settings</Btn>
         </div>
       )}
     </div>
