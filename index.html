@@ -8,6 +8,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Inter, system-ui, sans-serif; background: #f8f6f1; }
@@ -26,16 +27,23 @@ const T = {
 };
 
 const STATUS_COLORS = {
-  "New":            {bg:"#e8edf5",text:"#2d4a8a"},
-  "Screening":      {bg:"#fef3e2",text:"#8a5a00"},
-  "Shortlisted":    {bg:"#e8f5ee",text:"#2a7d4f"},
-  "Sent to Client": {bg:"#f0ebff",text:"#5a2d9a"},
-  "Placed":         {bg:"#d4edda",text:"#155724"},
-  "On Hold":        {bg:"#f5f5f5",text:"#5a6480"},
-  "Not Suitable":   {bg:"#fde8e8",text:"#7a1f1f"}
+  "New":{bg:"#e8edf5",text:"#2d4a8a"},
+  "Screening":{bg:"#fef3e2",text:"#8a5a00"},
+  "Shortlisted":{bg:"#e8f5ee",text:"#2a7d4f"},
+  "Sent to Client":{bg:"#f0ebff",text:"#5a2d9a"},
+  "Placed":{bg:"#d4edda",text:"#155724"},
+  "On Hold":{bg:"#f5f5f5",text:"#5a6480"},
+  "Not Suitable":{bg:"#fde8e8",text:"#7a1f1f"}
 };
 
-const SAMPLE = [{
+const CLIENT_STATUS_COLORS = {
+  "Active":{bg:"#e8f5ee",text:"#2a7d4f"},
+  "Prospect":{bg:"#e8edf5",text:"#2d4a8a"},
+  "On Hold":{bg:"#fef3e2",text:"#8a5a00"},
+  "Inactive":{bg:"#f5f5f5",text:"#5a6480"}
+};
+
+const SAMPLE_CANDIDATES = [{
   id:"c001",name:"Yuki Tanaka",gender:"Female",nationality:"Japanese",
   visaStatus:"Highly Skilled Migrant",visaExpiry:"2026-09-30",
   email:"y.tanaka@email.com",phone:"+31 6 12345678",location:"Amsterdam",
@@ -52,16 +60,35 @@ const SAMPLE = [{
   ]
 }];
 
-function uid(){return "c"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+const SAMPLE_CLIENTS = [{
+  id:"cl001",company:"Sony Europe B.V.",industry:"Consumer Electronics",
+  origin:"Japanese",hqCountry:"Japan",localOffice:"Amsterdam",
+  status:"Active",feeAgreed:"20%",feeSignedDate:"2026-05-01",
+  contactName:"Kenji Nakamura",contactTitle:"HR Manager",
+  contactEmail:"k.nakamura@sony.com",contactPhone:"+31 20 123 4567",
+  openRoles:"Marketing Manager, Sales Director",
+  notes:"Prefer Japanese-speaking candidates. Decision-making is slow — allow 4 weeks.",
+  addedDate:"2026-05-01",
+  documents:[]
+}];
+
+function uid(){return "x"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function today(){return new Date().toISOString().slice(0,10);}
 
-function Badge({status}){
-  const c=STATUS_COLORS[status]||{bg:T.mist,text:T.slate};
+function Badge({status,colors}){
+  const map=colors||STATUS_COLORS;
+  const c=map[status]||{bg:T.mist,text:T.slate};
   return <span style={{background:c.bg,color:c.text,padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{status}</span>;
 }
 
 function Btn({children,onClick,variant="primary",disabled,small}){
-  const V={primary:{background:T.navy,color:T.white,border:"none"},accent:{background:T.vermil,color:T.white,border:"none"},ghost:{background:"transparent",color:T.slate,border:`1px solid ${T.sand}`},success:{background:T.green,color:T.white,border:"none"}};
+  const V={
+    primary:{background:T.navy,color:T.white,border:"none"},
+    accent:{background:T.vermil,color:T.white,border:"none"},
+    ghost:{background:"transparent",color:T.slate,border:`1px solid ${T.sand}`},
+    success:{background:T.green,color:T.white,border:"none"},
+    warn:{background:T.amber,color:T.white,border:"none"}
+  };
   return <button onClick={onClick} disabled={disabled} style={{...V[variant],borderRadius:6,cursor:disabled?"not-allowed":"pointer",fontFamily:"Inter,sans-serif",fontWeight:600,opacity:disabled?0.5:1,padding:small?"5px 12px":"9px 18px",fontSize:small?12:13}}>{children}</button>;
 }
 
@@ -87,92 +114,131 @@ Use this exact structure:
 Return ONLY the JSON. Nothing else.`;
 
 function App(){
-  const [view,setView]=useState("list");
-  const [candidates,setCandidates]=useState(SAMPLE);
+  const [view,setView]=useState("candidates");
+  const [candidates,setCandidates]=useState(SAMPLE_CANDIDATES);
+  const [clients,setClients]=useState(SAMPLE_CLIENTS);
   const [selected,setSelected]=useState(null);
+  const [selectedClient,setSelectedClient]=useState(null);
   const [search,setSearch]=useState("");
+  const [clientSearch,setClientSearch]=useState("");
   const [filterStatus,setFilterStatus]=useState("All");
   const [form,setForm]=useState(null);
+  const [clientForm,setClientForm]=useState(null);
   const [uploading,setUploading]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem("ltc_api_key")||"");
   const [sheetId,setSheetId]=useState(()=>localStorage.getItem("ltc_sheet_id")||"");
   const [sheetKey,setSheetKey]=useState(()=>localStorage.getItem("ltc_sheet_key")||"");
   const [toast,setToast]=useState(null);
   const fileRef=useRef();
+  const docRef=useRef();
 
   function notify(msg,type="ok"){setToast({msg,type});setTimeout(()=>setToast(null),3500);}
   function setF(k,v){setForm(f=>({...f,[k]:v}));}
   function setExp(i,k,v){setForm(f=>({...f,experience:f.experience.map((e,j)=>j===i?{...e,[k]:v}:e)}));}
   function setEdu(i,k,v){setForm(f=>({...f,education:f.education.map((e,j)=>j===i?{...e,[k]:v}:e)}));}
+  function setCF(k,v){setClientForm(f=>({...f,[k]:v}));}
 
   async function handleFile(file){
     if(!file)return;
     if(!apiKey){notify("Add your Anthropic API key in Settings first","err");setView("settings");return;}
     setUploading(true);
     try{
-      const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
       const isPdf=file.type==="application/pdf";
-      const resp=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:isPdf?[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:PROMPT}]:[{type:"text",text:PROMPT}]}]})
-      });
-      const data=await resp.json();
-      if(data.error)throw new Error(data.error.message);
-      const raw=data.content?.map(b=>b.text||"").join("")||"";
-      const extracted=JSON.parse(raw.replace(/```json|```/g,"").trim());
-      setForm({id:uid(),...extracted,status:"New",source:"Upload",addedDate:today()});
-      setView("edit");
+      if(isPdf){
+        const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+        const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:PROMPT}]}]})});
+        const data=await resp.json();
+        if(data.error)throw new Error(data.error.message);
+        const extracted=JSON.parse(data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
+        setForm({id:uid(),...extracted,status:"New",source:"Upload",addedDate:today()});
+      } else {
+        const arrayBuffer=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsArrayBuffer(file);});
+        const result=await mammoth.extractRawText({arrayBuffer});
+        const cvText=result.value;
+        if(!cvText||cvText.trim().length<50)throw new Error("Could not read file");
+        const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:`${PROMPT}\n\nCV TEXT:\n${cvText}`}]})});
+        const data=await resp.json();
+        if(data.error)throw new Error(data.error.message);
+        const extracted=JSON.parse(data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
+        setForm({id:uid(),...extracted,status:"New",source:"Upload",addedDate:today()});
+      }
+      setView("editCandidate");
       notify("CV extracted — please review and save");
     }catch(err){
       console.error(err);
       setForm({id:uid(),status:"New",source:"Upload",addedDate:today(),education:[],experience:[],languages:[],skills:[]});
-      setView("edit");
+      setView("editCandidate");
       notify("Extraction failed — please fill in manually","err");
     }finally{setUploading(false);}
   }
 
-  async function save(){
-    if(!form?.name){notify("Name is required","err");return;}
-    const updated=prev=>prev.find(c=>c.id===form.id)?prev.map(c=>c.id===form.id?form:c):[form,...prev];
-    setCandidates(updated);
-    notify(form.name+" saved");
-    if(sheetId&&sheetKey){
-      try{
-        const row=[form.id,form.name,form.gender,form.nationality,form.visaStatus,form.desiredSalary,form.availability,form.currentRole,form.currentCompany,form.email,form.phone,form.location,form.status,form.source,form.addedDate,(form.languages||[]).join("; "),(form.skills||[]).join("; "),form.notes];
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED&key=${sheetKey}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({values:[row]})});
-      }catch(e){console.error("Sheet sync failed",e);}
-    }
-    setView("list");
+  async function handleClientDoc(file,clientId){
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const doc={id:uid(),name:file.name,type:file.type,size:Math.round(file.size/1024)+"KB",date:today(),data:e.target.result};
+      setClients(prev=>prev.map(c=>c.id===clientId?{...c,documents:[...(c.documents||[]),doc]}:c));
+      if(selectedClient&&selectedClient.id===clientId)setSelectedClient(c=>({...c,documents:[...(c.documents||[]),doc]}));
+      notify(file.name+" uploaded");
+    };
+    reader.readAsDataURL(file);
   }
 
-  const filtered=candidates.filter(c=>{
+  function saveCandidate(){
+    if(!form?.name){notify("Name is required","err");return;}
+    setCandidates(prev=>prev.find(c=>c.id===form.id)?prev.map(c=>c.id===form.id?form:c):[form,...prev]);
+    notify(form.name+" saved");
+    setView("candidates");
+  }
+
+  function saveClient(){
+    if(!clientForm?.company){notify("Company name is required","err");return;}
+    setClients(prev=>prev.find(c=>c.id===clientForm.id)?prev.map(c=>c.id===clientForm.id?clientForm:c):[clientForm,...prev]);
+    notify(clientForm.company+" saved");
+    setView("clients");
+  }
+
+  function deleteDoc(clientId,docId){
+    setClients(prev=>prev.map(c=>c.id===clientId?{...c,documents:c.documents.filter(d=>d.id!==docId)}:c));
+    setSelectedClient(c=>({...c,documents:c.documents.filter(d=>d.id!==docId)}));
+    notify("Document removed");
+  }
+
+  const filteredCandidates=candidates.filter(c=>{
     const q=search.toLowerCase();
     return(!q||[c.name,c.currentRole,c.currentCompany].some(v=>v?.toLowerCase().includes(q)))&&(filterStatus==="All"||c.status===filterStatus);
   });
 
+  const filteredClients=clients.filter(c=>{
+    const q=clientSearch.toLowerCase();
+    return !q||[c.company,c.contactName,c.industry,c.origin].some(v=>v?.toLowerCase().includes(q));
+  });
+
+  const navItems=[["candidates","📋 Candidates"],["clients","🏢 Clients"],["settings","⚙ Settings"]];
+
   return (
     <div style={{fontFamily:"Inter,system-ui,sans-serif",background:T.ivory,minHeight:"100vh",color:T.ink}}>
+
       {/* HEADER */}
       <div style={{background:T.navy,color:T.white,padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:54,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:30,height:30,background:T.vermil,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>🪷</div>
           <div>
             <div style={{fontSize:14,fontWeight:800}}>Lotus Talent Consultancy</div>
-            <div style={{fontSize:9,color:T.silver,letterSpacing:"0.08em"}}>CANDIDATE TRACKER</div>
+            <div style={{fontSize:9,color:T.silver,letterSpacing:"0.08em"}}>ATS & CRM</div>
           </div>
         </div>
         <div style={{display:"flex",gap:6}}>
-          {[["list","📋 Candidates"],["settings","⚙ Settings"]].map(([v,label])=>(
-            <button key={v} onClick={()=>setView(v)} style={{background:view===v?T.indigo:"transparent",color:T.white,border:"none",borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
+          {navItems.map(([v,label])=>(
+            <button key={v} onClick={()=>setView(v)} style={{background:view===v||view.startsWith(v.replace("candidates","editCandidate").replace("clients","editClient").replace("clients","clientDetail"))?T.indigo:"transparent",color:T.white,border:"none",borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
           ))}
         </div>
       </div>
 
       {toast&&<div style={{position:"fixed",top:16,right:16,zIndex:9999,background:toast.type==="err"?T.vermil:T.green,color:T.white,padding:"11px 18px",borderRadius:8,fontSize:13,fontWeight:600,boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}>{toast.msg}</div>}
 
-      {/* LIST */}
-      {view==="list"&&(
+      {/* ── CANDIDATES LIST ── */}
+      {view==="candidates"&&(
         <div style={{padding:24,maxWidth:1080,margin:"0 auto"}}>
           <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0]);}} onClick={()=>fileRef.current.click()}
             style={{border:`2px dashed ${T.sky}`,borderRadius:10,padding:"22px 20px",textAlign:"center",marginBottom:20,cursor:"pointer",background:uploading?T.mist:T.white}}>
@@ -181,27 +247,24 @@ function App(){
             :apiKey?<div><div style={{fontSize:24}}>📄</div><div style={{color:T.navy,fontWeight:700,marginTop:6}}>Drop CV here or click to upload</div><div style={{color:T.slate,fontSize:12,marginTop:3}}>PDF or Word — AI extracts all fields automatically</div></div>
             :<div><div style={{fontSize:24}}>⚙️</div><div style={{color:T.vermil,fontWeight:700,marginTop:6}}>API key needed</div><div style={{color:T.slate,fontSize:12,marginTop:3}}>Go to Settings → add your Anthropic API key</div></div>}
           </div>
-
           <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{flex:1,minWidth:180,padding:"7px 12px",borderRadius:6,border:`1px solid ${T.sand}`,fontSize:13,fontFamily:"Inter,sans-serif",outline:"none"}}/>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{flex:1,minWidth:180,padding:"7px 12px",borderRadius:6,border:`1px solid ${T.sand}`,fontSize:13,outline:"none"}}/>
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{padding:"7px 12px",borderRadius:6,border:`1px solid ${T.sand}`,fontSize:13,background:T.white}}>
               <option>All</option>{Object.keys(STATUS_COLORS).map(s=><option key={s}>{s}</option>)}
             </select>
-            <Btn onClick={()=>{setForm({id:uid(),status:"New",source:"Manual",addedDate:today(),education:[],experience:[],languages:[],skills:[]});setView("edit");}}>+ Add Manually</Btn>
+            <Btn onClick={()=>{setForm({id:uid(),status:"New",source:"Manual",addedDate:today(),education:[],experience:[],languages:[],skills:[]});setView("editCandidate");}}>+ Add Manually</Btn>
           </div>
-
           <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
             {Object.entries(STATUS_COLORS).map(([s,c])=>{const n=candidates.filter(x=>x.status===s).length;return n>0?<span key={s} style={{background:c.bg,color:c.text,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>{s}: {n}</span>:null;})}
           </div>
-
           <div style={{background:T.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{background:T.navy,color:T.white}}>
                 {["Candidate","Current Role","Nationality / Visa","Desired Salary","Available","Status","Actions"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {filtered.length===0&&<tr><td colSpan={7} style={{padding:40,textAlign:"center",color:T.slate}}>No candidates yet — upload a CV or add manually</td></tr>}
-                {filtered.map((c,i)=>(
+                {filteredCandidates.length===0&&<tr><td colSpan={7} style={{padding:40,textAlign:"center",color:T.slate}}>No candidates yet — upload a CV or add manually</td></tr>}
+                {filteredCandidates.map((c,i)=>(
                   <tr key={c.id} style={{background:i%2===0?T.white:T.ivory,borderBottom:`1px solid ${T.sand}`}}>
                     <td style={{padding:"10px 14px"}}><div style={{fontWeight:700,color:T.navy}}>{c.name}</div><div style={{fontSize:11,color:T.slate}}>{c.source} · {c.addedDate}</div></td>
                     <td style={{padding:"10px 14px"}}><div>{c.currentRole}</div><div style={{fontSize:11,color:T.slate}}>{c.currentCompany}</div></td>
@@ -209,21 +272,24 @@ function App(){
                     <td style={{padding:"10px 14px",fontWeight:600}}>{c.desiredSalary||"—"}</td>
                     <td style={{padding:"10px 14px"}}>{c.availability||"—"}</td>
                     <td style={{padding:"10px 14px"}}><Badge status={c.status}/></td>
-                    <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:6}}><Btn small variant="ghost" onClick={()=>{setForm({...c});setView("edit");}}>Edit</Btn><Btn small onClick={()=>{setSelected(c);setView("cv");}}>CV</Btn></div></td>
+                    <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:6}}>
+                      <Btn small variant="ghost" onClick={()=>{setForm({...c});setView("editCandidate");}}>Edit</Btn>
+                      <Btn small onClick={()=>{setSelected(c);setView("cv");}}>CV</Btn>
+                    </div></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div style={{color:T.silver,fontSize:11,marginTop:8,textAlign:"right"}}>{filtered.length} candidate{filtered.length!==1?"s":""}</div>
+          <div style={{color:T.silver,fontSize:11,marginTop:8,textAlign:"right"}}>{filteredCandidates.length} candidate{filteredCandidates.length!==1?"s":""}</div>
         </div>
       )}
 
-      {/* EDIT FORM */}
-      {view==="edit"&&form&&(
+      {/* ── EDIT CANDIDATE ── */}
+      {view==="editCandidate"&&form&&(
         <div style={{padding:24,maxWidth:900,margin:"0 auto"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
-            <Btn variant="ghost" small onClick={()=>{setView("list");setForm(null);}}>← Back</Btn>
+            <Btn variant="ghost" small onClick={()=>{setView("candidates");setForm(null);}}>← Back</Btn>
             <h2 style={{margin:0,fontSize:17,fontWeight:800,color:T.navy}}>{form.name?`Edit: ${form.name}`:"New Candidate"}</h2>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
@@ -291,18 +357,18 @@ function App(){
             </div>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,paddingTop:16,borderTop:`1px solid ${T.sand}`}}>
-            <Btn variant="ghost" onClick={()=>{setView("list");setForm(null);}}>Cancel</Btn>
-            <Btn variant="success" onClick={save}>Save Candidate</Btn>
-            {form.name&&<Btn variant="accent" onClick={()=>{save();const c=form;setTimeout(()=>{setSelected(c);setView("cv");},200);}}>Save & Generate CV</Btn>}
+            <Btn variant="ghost" onClick={()=>{setView("candidates");setForm(null);}}>Cancel</Btn>
+            <Btn variant="success" onClick={saveCandidate}>Save Candidate</Btn>
+            {form.name&&<Btn variant="accent" onClick={()=>{saveCandidate();const c=form;setTimeout(()=>{setSelected(c);setView("cv");},200);}}>Save & Generate CV</Btn>}
           </div>
         </div>
       )}
 
-      {/* CLIENT CV */}
+      {/* ── CLIENT CV ── */}
       {view==="cv"&&selected&&(
         <div style={{padding:24,maxWidth:860,margin:"0 auto"}}>
           <div className="no-print" style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
-            <Btn variant="ghost" small onClick={()=>setView("list")}>← Back</Btn>
+            <Btn variant="ghost" small onClick={()=>setView("candidates")}>← Back</Btn>
             <span style={{fontWeight:700,color:T.navy}}>Client CV — {selected.name}</span>
             <div style={{marginLeft:"auto"}}><Btn onClick={()=>window.print()}>🖨 Print / Save PDF</Btn></div>
           </div>
@@ -339,11 +405,194 @@ function App(){
         </div>
       )}
 
-      {/* SETTINGS */}
+      {/* ── CLIENTS LIST ── */}
+      {view==="clients"&&(
+        <div style={{padding:24,maxWidth:1080,margin:"0 auto"}}>
+          <div style={{display:"flex",gap:10,marginBottom:20,alignItems:"center"}}>
+            <input value={clientSearch} onChange={e=>setClientSearch(e.target.value)} placeholder="Search clients…" style={{flex:1,minWidth:180,padding:"7px 12px",borderRadius:6,border:`1px solid ${T.sand}`,fontSize:13,outline:"none"}}/>
+            <Btn onClick={()=>{setClientForm({id:uid(),status:"Prospect",origin:"Japanese",addedDate:today(),documents:[],openRoles:""});setView("editClient");}}>+ Add Client</Btn>
+          </div>
+
+          {/* Stats */}
+          <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+            {Object.entries(CLIENT_STATUS_COLORS).map(([s,c])=>{const n=clients.filter(x=>x.status===s).length;return n>0?<span key={s} style={{background:c.bg,color:c.text,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>{s}: {n}</span>:null;})}
+          </div>
+
+          <div style={{background:T.white,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{background:T.navy,color:T.white}}>
+                {["Company","Origin","Contact","Open Roles","Fee","Status","Actions"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {filteredClients.length===0&&<tr><td colSpan={7} style={{padding:40,textAlign:"center",color:T.slate}}>No clients yet — add your first client</td></tr>}
+                {filteredClients.map((c,i)=>(
+                  <tr key={c.id} style={{background:i%2===0?T.white:T.ivory,borderBottom:`1px solid ${T.sand}`}}>
+                    <td style={{padding:"10px 14px"}}><div style={{fontWeight:700,color:T.navy}}>{c.company}</div><div style={{fontSize:11,color:T.slate}}>{c.industry} · {c.localOffice}</div></td>
+                    <td style={{padding:"10px 14px"}}><div>{c.origin}</div><div style={{fontSize:11,color:T.slate}}>HQ: {c.hqCountry}</div></td>
+                    <td style={{padding:"10px 14px"}}><div>{c.contactName}</div><div style={{fontSize:11,color:T.slate}}>{c.contactTitle}</div></td>
+                    <td style={{padding:"10px 14px",fontSize:12,color:T.slate,maxWidth:200}}>{c.openRoles||"—"}</td>
+                    <td style={{padding:"10px 14px",fontWeight:600}}>{c.feeAgreed||"—"}</td>
+                    <td style={{padding:"10px 14px"}}><Badge status={c.status} colors={CLIENT_STATUS_COLORS}/></td>
+                    <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:6}}>
+                      <Btn small variant="ghost" onClick={()=>{setClientForm({...c});setView("editClient");}}>Edit</Btn>
+                      <Btn small onClick={()=>{setSelectedClient(c);setView("clientDetail");}}>View</Btn>
+                    </div></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{color:T.silver,fontSize:11,marginTop:8,textAlign:"right"}}>{filteredClients.length} client{filteredClients.length!==1?"s":""}</div>
+        </div>
+      )}
+
+      {/* ── EDIT CLIENT ── */}
+      {view==="editClient"&&clientForm&&(
+        <div style={{padding:24,maxWidth:860,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+            <Btn variant="ghost" small onClick={()=>{setView("clients");setClientForm(null);}}>← Back</Btn>
+            <h2 style={{margin:0,fontSize:17,fontWeight:800,color:T.navy}}>{clientForm.company?`Edit: ${clientForm.company}`:"New Client"}</h2>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+            <div>
+              <SH title="Company Information"/>
+              <Field label="Company Name *" value={clientForm.company} onChange={v=>setCF("company",v)}/>
+              <Field label="Industry" value={clientForm.industry} onChange={v=>setCF("industry",v)} placeholder="Consumer Electronics, Trading…"/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Field label="Origin" as="select" value={clientForm.origin} onChange={v=>setCF("origin",v)} options={["Japanese","Korean","Chinese","Taiwanese","Other Asian"]}/>
+                <Field label="HQ Country" value={clientForm.hqCountry} onChange={v=>setCF("hqCountry",v)} placeholder="Japan"/>
+              </div>
+              <Field label="Local Office (City)" value={clientForm.localOffice} onChange={v=>setCF("localOffice",v)} placeholder="Amsterdam"/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Field label="Status" as="select" value={clientForm.status} onChange={v=>setCF("status",v)} options={Object.keys(CLIENT_STATUS_COLORS)}/>
+              </div>
+
+              <SH title="Fee Agreement"/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Field label="Agreed Fee %" value={clientForm.feeAgreed} onChange={v=>setCF("feeAgreed",v)} placeholder="20%"/>
+                <Field label="Agreement Signed Date" type="date" value={clientForm.feeSignedDate} onChange={v=>setCF("feeSignedDate",v)}/>
+              </div>
+
+              <SH title="Notes & Relationship"/>
+              <Field label="Notes" as="textarea" value={clientForm.notes} onChange={v=>setCF("notes",v)} placeholder="Culture notes, decision process, preferences…" rows={4}/>
+            </div>
+            <div>
+              <SH title="Main Contact Person"/>
+              <Field label="Contact Name" value={clientForm.contactName} onChange={v=>setCF("contactName",v)}/>
+              <Field label="Job Title" value={clientForm.contactTitle} onChange={v=>setCF("contactTitle",v)} placeholder="HR Manager, Office Manager…"/>
+              <Field label="Email" type="email" value={clientForm.contactEmail} onChange={v=>setCF("contactEmail",v)}/>
+              <Field label="Phone" value={clientForm.contactPhone} onChange={v=>setCF("contactPhone",v)}/>
+
+              <SH title="Open Roles / Mandates"/>
+              <Field label="Active Job Openings" as="textarea" value={clientForm.openRoles} onChange={v=>setCF("openRoles",v)} placeholder={"Marketing Manager\nSales Director\nFinance Controller"} rows={4}/>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,paddingTop:16,borderTop:`1px solid ${T.sand}`}}>
+            <Btn variant="ghost" onClick={()=>{setView("clients");setClientForm(null);}}>Cancel</Btn>
+            <Btn variant="success" onClick={saveClient}>Save Client</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── CLIENT DETAIL ── */}
+      {view==="clientDetail"&&selectedClient&&(()=>{
+        const cl=clients.find(c=>c.id===selectedClient.id)||selectedClient;
+        return (
+          <div style={{padding:24,maxWidth:900,margin:"0 auto"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+              <Btn variant="ghost" small onClick={()=>setView("clients")}>← Back</Btn>
+              <h2 style={{margin:0,fontSize:17,fontWeight:800,color:T.navy}}>{cl.company}</h2>
+              <Badge status={cl.status} colors={CLIENT_STATUS_COLORS}/>
+              <div style={{marginLeft:"auto"}}>
+                <Btn small onClick={()=>{setClientForm({...cl});setView("editClient");}}>Edit</Btn>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+              {/* Company info */}
+              <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+                <SH title="Company"/>
+                {[["Industry",cl.industry],["Origin",cl.origin],["HQ Country",cl.hqCountry],["Local Office",cl.localOffice],["Agreed Fee",cl.feeAgreed],["Fee Signed",cl.feeSignedDate]].filter(([,v])=>v).map(([l,v])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.sand}`,fontSize:13}}>
+                    <span style={{color:T.slate,fontSize:12}}>{l}</span>
+                    <span style={{fontWeight:600}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Contact */}
+              <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+                <SH title="Main Contact"/>
+                {[["Name",cl.contactName],["Title",cl.contactTitle],["Email",cl.contactEmail],["Phone",cl.contactPhone]].filter(([,v])=>v).map(([l,v])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.sand}`,fontSize:13}}>
+                    <span style={{color:T.slate,fontSize:12}}>{l}</span>
+                    <span style={{fontWeight:600}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Open Roles */}
+            {cl.openRoles&&(
+              <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:20}}>
+                <SH title="Open Roles / Active Mandates"/>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {cl.openRoles.split("\n").filter(Boolean).map((r,i)=>(
+                    <span key={i} style={{background:T.mist,color:T.indigo,borderRadius:20,padding:"4px 14px",fontSize:12,fontWeight:600}}>{r}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {cl.notes&&(
+              <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:20}}>
+                <SH title="Notes & Relationship"/>
+                <div style={{fontSize:13,color:T.slate,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{cl.notes}</div>
+              </div>
+            )}
+
+            {/* Documents / Email Log */}
+            <div style={{background:T.white,borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:800,color:T.indigo,textTransform:"uppercase",letterSpacing:"0.1em"}}>📎 Documents & Email Log</div>
+                <div>
+                  <input ref={docRef} type="file" style={{display:"none"}} onChange={e=>handleClientDoc(e.target.files[0],cl.id)}/>
+                  <Btn small onClick={()=>docRef.current.click()}>+ Upload Document</Btn>
+                </div>
+              </div>
+              <div style={{fontSize:12,color:T.slate,marginBottom:12,background:T.mist,borderRadius:6,padding:"8px 12px"}}>
+                Upload emails (saved as PDF), contracts, proposals, or any correspondence. Acts as your log and backup storage.
+              </div>
+              {(!cl.documents||cl.documents.length===0)&&(
+                <div style={{textAlign:"center",padding:"30px 0",color:T.silver,fontSize:13}}>No documents yet — upload emails or files above</div>
+              )}
+              {(cl.documents||[]).map(doc=>(
+                <div key={doc.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:8,border:`1px solid ${T.sand}`,marginBottom:8,background:T.ivory}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{fontSize:20}}>{doc.type?.includes("pdf")?"📄":doc.type?.includes("image")?"🖼️":"📎"}</div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.navy}}>{doc.name}</div>
+                      <div style={{fontSize:11,color:T.slate}}>{doc.date} · {doc.size}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <a href={doc.data} download={doc.name} style={{textDecoration:"none"}}>
+                      <Btn small variant="ghost">⬇ Download</Btn>
+                    </a>
+                    <Btn small variant="ghost" onClick={()=>deleteDoc(cl.id,doc.id)}>🗑</Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── SETTINGS ── */}
       {view==="settings"&&(
         <div style={{padding:24,maxWidth:580,margin:"0 auto"}}>
           <h2 style={{color:T.navy,marginBottom:4,fontWeight:800}}>Settings</h2>
-          <p style={{color:T.slate,fontSize:13,marginBottom:20}}>Configure AI extraction and Google Sheets sync.</p>
+          <p style={{color:T.slate,fontSize:13,marginBottom:20}}>Configure AI extraction and integrations.</p>
           <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:16}}>
             <SH title="🤖 Anthropic API Key (Required for CV extraction)"/>
             <div style={{background:"#fff8e8",borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:12,color:"#7a5000",lineHeight:1.6,borderLeft:`3px solid ${T.amber}`}}>
@@ -358,14 +607,22 @@ function App(){
             <Field label="Google API Key" value={sheetKey} onChange={v=>{setSheetKey(v);localStorage.setItem("ltc_sheet_key",v);}} placeholder="AIza..."/>
           </div>
           <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:16}}>
-            <SH title="⬇ Export Candidates"/>
-            <p style={{color:T.slate,fontSize:12,marginBottom:12}}>Download all candidates as CSV backup.</p>
-            <Btn onClick={()=>{
-              const h=["ID","Name","Gender","Nationality","Visa","Salary","Available","Role","Company","Email","Phone","Location","Status","Source","Added","Languages","Skills","Notes"];
-              const rows=candidates.map(c=>[c.id,c.name,c.gender,c.nationality,c.visaStatus,c.desiredSalary,c.availability,c.currentRole,c.currentCompany,c.email,c.phone,c.location,c.status,c.source,c.addedDate,(c.languages||[]).join("; "),(c.skills||[]).join("; "),c.notes].map(v=>`"${(v||"").replace(/"/g,'""')}"`));
-              const csv=[h,...rows].map(r=>r.join(",")).join("\n");
-              const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="lotus_candidates.csv";a.click();
-            }}>⬇ Download CSV</Btn>
+            <SH title="⬇ Export Data"/>
+            <p style={{color:T.slate,fontSize:12,marginBottom:12}}>Download candidates or clients as CSV.</p>
+            <div style={{display:"flex",gap:10}}>
+              <Btn onClick={()=>{
+                const h=["ID","Name","Gender","Nationality","Visa","Salary","Available","Role","Company","Email","Phone","Location","Status","Source","Added","Languages","Skills","Notes"];
+                const rows=candidates.map(c=>[c.id,c.name,c.gender,c.nationality,c.visaStatus,c.desiredSalary,c.availability,c.currentRole,c.currentCompany,c.email,c.phone,c.location,c.status,c.source,c.addedDate,(c.languages||[]).join("; "),(c.skills||[]).join("; "),c.notes].map(v=>`"${(v||"").replace(/"/g,'""')}"`));
+                const csv=[h,...rows].map(r=>r.join(",")).join("\n");
+                const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="lotus_candidates.csv";a.click();
+              }}>⬇ Candidates CSV</Btn>
+              <Btn variant="ghost" onClick={()=>{
+                const h=["ID","Company","Industry","Origin","HQ","Office","Status","Fee","Signed","Contact","Title","Email","Phone","Open Roles","Notes","Added"];
+                const rows=clients.map(c=>[c.id,c.company,c.industry,c.origin,c.hqCountry,c.localOffice,c.status,c.feeAgreed,c.feeSignedDate,c.contactName,c.contactTitle,c.contactEmail,c.contactPhone,c.openRoles,c.notes,c.addedDate].map(v=>`"${(v||"").replace(/"/g,'""')}"`));
+                const csv=[h,...rows].map(r=>r.join(",")).join("\n");
+                const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="lotus_clients.csv";a.click();
+              }}>⬇ Clients CSV</Btn>
+            </div>
           </div>
           <Btn variant="success" onClick={()=>notify("Settings saved")}>Save Settings</Btn>
         </div>
