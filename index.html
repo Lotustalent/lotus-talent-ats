@@ -148,6 +148,43 @@ For skills: leave empty — use softwareSkills and softSkills instead.
 For noticePeriod: extract notice period if mentioned (e.g. "1 month", "2 months", "Immediate").
 Return ONLY the JSON. Nothing else.`;
 
+const ALL_LANGUAGES = [
+  "Japanese (Native)","Japanese (Business)","Japanese (Conversational)",
+  "Korean (Native)","Korean (Business)","Korean (Conversational)",
+  "Mandarin (Native)","Mandarin (Business)","Mandarin (Conversational)",
+  "Cantonese (Native)","Cantonese (Conversational)",
+  "English (Native)","English (Fluent)","English (Business)","English (Conversational)",
+  "Dutch (Native)","Dutch (Fluent)","Dutch (Business)","Dutch (Basic)",
+  "German (Native)","German (Fluent)","German (Business)","German (Basic)",
+  "French (Native)","French (Fluent)","French (Basic)",
+  "Spanish (Native)","Spanish (Fluent)","Spanish (Conversational)",
+  "Portuguese (Native)","Portuguese (Fluent)",
+  "Italian (Native)","Italian (Fluent)",
+  "Arabic (Native)","Arabic (Fluent)","Arabic (Business)",
+  "Hindi (Native)","Hindi (Fluent)","Hindi (Conversational)",
+  "Tagalog (Native)","Tagalog (Fluent)",
+  "Indonesian (Native)","Indonesian (Fluent)",
+  "Thai (Native)","Thai (Fluent)",
+  "Vietnamese (Native)","Vietnamese (Fluent)",
+  "Malay (Native)","Malay (Fluent)",
+  "Tamil (Native)","Tamil (Fluent)",
+  "Bengali (Native)","Bengali (Fluent)",
+  "Urdu (Native)","Urdu (Fluent)",
+  "Polish (Native)","Polish (Fluent)",
+  "Russian (Native)","Russian (Fluent)",
+  "Turkish (Native)","Turkish (Fluent)",
+  "Romanian (Native)","Romanian (Fluent)",
+  "Greek (Native)","Greek (Fluent)",
+  "Swedish (Native)","Swedish (Fluent)",
+  "Norwegian (Native)","Norwegian (Fluent)",
+  "Danish (Native)","Danish (Fluent)",
+  "Finnish (Native)","Finnish (Fluent)",
+  "Czech (Native)","Czech (Fluent)",
+  "Hungarian (Native)","Hungarian (Fluent)",
+  "Hebrew (Native)","Hebrew (Fluent)",
+  "Swahili (Native)","Swahili (Fluent)",
+];
+
 async function rewriteExperience(experience, apiKey) {
   if (!apiKey || !experience || experience.length === 0) return experience;
   const expText = experience.map((e, i) => `Role ${i+1}: ${e.role} at ${e.company}
@@ -417,49 +454,13 @@ function App(){
               <Field label="Job Title" value={form.currentRole} onChange={v=>setF("currentRole",v)}/>
               <Field label="Company" value={form.currentCompany} onChange={v=>setF("currentCompany",v)}/>
               <SH title="Languages"/>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8,maxHeight:200,overflowY:"auto",padding:"8px",background:"#f8f6f1",borderRadius:8,border:"1px solid #ede9e0"}}>
-                {[
-                  "Japanese (Native)","Japanese (Business)","Japanese (Conversational)",
-                  "Korean (Native)","Korean (Business)","Korean (Conversational)",
-                  "Mandarin (Native)","Mandarin (Business)","Mandarin (Conversational)",
-                  "Cantonese (Native)","Cantonese (Conversational)",
-                  "English (Native)","English (Fluent)","English (Business)","English (Conversational)",
-                  "Dutch (Native)","Dutch (Fluent)","Dutch (Business)","Dutch (Basic)",
-                  "German (Native)","German (Fluent)","German (Business)","German (Basic)",
-                  "French (Native)","French (Fluent)","French (Business)","French (Basic)",
-                  "Spanish (Native)","Spanish (Fluent)","Spanish (Conversational)",
-                  "Portuguese (Native)","Portuguese (Fluent)","Portuguese (Conversational)",
-                  "Italian (Native)","Italian (Fluent)","Italian (Conversational)",
-                  "Arabic (Native)","Arabic (Fluent)","Arabic (Business)",
-                  "Hindi (Native)","Hindi (Fluent)","Hindi (Conversational)",
-                  "Tagalog (Native)","Tagalog (Fluent)",
-                  "Indonesian (Native)","Indonesian (Fluent)",
-                  "Thai (Native)","Thai (Fluent)",
-                  "Vietnamese (Native)","Vietnamese (Fluent)",
-                  "Malay (Native)","Malay (Fluent)",
-                  "Tamil (Native)","Tamil (Fluent)",
-                  "Bengali (Native)","Bengali (Fluent)",
-                  "Urdu (Native)","Urdu (Fluent)",
-                  "Polish (Native)","Polish (Fluent)",
-                  "Russian (Native)","Russian (Fluent)","Russian (Conversational)",
-                  "Turkish (Native)","Turkish (Fluent)",
-                  "Romanian (Native)","Romanian (Fluent)",
-                  "Greek (Native)","Greek (Fluent)",
-                  "Swedish (Native)","Swedish (Fluent)",
-                  "Norwegian (Native)","Norwegian (Fluent)",
-                  "Danish (Native)","Danish (Fluent)",
-                  "Finnish (Native)","Finnish (Fluent)",
-                  "Czech (Native)","Czech (Fluent)",
-                  "Hungarian (Native)","Hungarian (Fluent)",
-                  "Hebrew (Native)","Hebrew (Fluent)",
-                  "Swahili (Native)","Swahili (Fluent)",
-                ].map(lang=>{
-                  const selected=(form.languages||[]).includes(lang);
-                  return <button key={lang} onClick={()=>setF("languages",selected?(form.languages||[]).filter(l=>l!==lang):[...(form.languages||[]),lang])}
-                    style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${selected?"#2d4a8a":"#ede9e0"}`,background:selected?"#2d4a8a":"white",color:selected?"white":"#5a6480"}}>{lang}</button>;
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8,maxHeight:180,overflowY:"auto",padding:"8px",background:"#f8f6f1",borderRadius:8,border:"1px solid #ede9e0"}}>
+                {ALL_LANGUAGES.map(lang=>{
+                  const sel=(form.languages||[]).includes(lang);
+                  return <button key={lang} onClick={()=>setF("languages",sel?(form.languages||[]).filter(l=>l!==lang):[...(form.languages||[]),lang])}
+                    style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid "+(sel?"#2d4a8a":"#ede9e0"),background:sel?"#2d4a8a":"white",color:sel?"white":"#5a6480"}}>{lang}</button>;
                 })}
               </div>
-              <Field label="Other language (type manually)" value={""} onChange={v=>{if(v&&!form.languages?.includes(v))setF("languages",[...(form.languages||[]),v]);}} placeholder="Type + press Enter"/>
               <SH title="Software & Tools"/>
               <Field label="Software skills (one per line)" as="textarea" value={(form.softwareSkills||[]).join("\n")} onChange={v=>setF("softwareSkills",v.split("\n").filter(Boolean))} rows={3} placeholder={"Python\nSalesforce\nPower BI"}/>
               <SH title="Soft Skills"/>
