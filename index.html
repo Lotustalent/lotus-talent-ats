@@ -187,30 +187,19 @@ const ALL_LANGUAGES = [
 
 async function rewriteExperience(experience, apiKey) {
   if (!apiKey || !experience || experience.length === 0) return experience;
-  const expText = experience.map((e, i) => `Role ${i+1}: ${e.role} at ${e.company}
-Description: ${e.description || ""}`).join("
-
-");
+  const expText = experience.map((e, i) => "Role " + (i+1) + ": " + e.role + " at " + e.company + "\nDescription: " + (e.description || "")).join("\n\n");
+  const systemMsg = "You are a professional CV writer. Rewrite the work experience descriptions into clear bullet points. Rules: Convert each into 3-5 bullet points starting with action verbs. Fix grammar. Keep facts accurate. Return ONLY a JSON array: [{index:0,bullets:[...]},{index:1,bullets:[...]}]";
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6", max_tokens: 2000,
-      messages: [{ role: "user", content: `You are a professional CV writer. Rewrite the following work experience descriptions to be clear, professional, and impactful. Rules:
-- Convert each description into 3-5 concise bullet points
-- Start each bullet with a strong action verb (Led, Managed, Developed, Coordinated, etc.)
-- Fix grammar and improve clarity
-- Keep factual content accurate — do not invent achievements
-- Return ONLY a JSON array in this exact format, nothing else:
-[{"index":0,"bullets":["bullet 1","bullet 2","bullet 3"]},{"index":1,"bullets":["bullet 1","bullet 2"]}]
-
-Experience to rewrite:
-${expText}` }]
+      messages: [{ role: "user", content: systemMsg + "\n\nExperience to rewrite:\n" + expText }]
     })
   });
   const data = await resp.json();
   if (data.error) return experience;
-  const raw = data.content?.map(b => b.text || "").join("").replace(/\`\`\`json|\`\`\`/g, "").trim();
+  const raw = (data.content||[]).map(b => b.text || "").join("").replace(/```json|```/g, "").trim();
   const rewrites = JSON.parse(raw);
   return experience.map((e, i) => {
     const rewrite = rewrites.find(r => r.index === i);
