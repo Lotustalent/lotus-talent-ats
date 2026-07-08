@@ -31,17 +31,23 @@ async function sbFetch(path, method = "GET", body = null, prefer = "return=repre
 
 async function loadCandidates() {
   const rows = await sbFetch("candidates?order=created_at.desc");
+  function parseJ(v) {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") { try { return JSON.parse(v); } catch(e) { return []; } }
+    return [];
+  }
   return rows.map(r => ({
-    id: r.id, name: r.name, gender: r.gender, nationality: r.nationality,
-    visaStatus: r.visa_status, visaExpiry: r.visa_expiry,
-    email: r.email, phone: r.phone, location: r.location,
-    desiredSalary: r.desired_salary, availability: r.availability,
-    noticePeriod: r.notice_period,
-    currentRole: r.job_title, currentCompany: r.current_company,
-    languages: r.languages || [], skills: r.skills || [],
-    softwareSkills: r.software_skills || [], softSkills: r.soft_skills || [],
-    education: r.education || [], experience: r.experience || [],
-    status: r.status, source: r.source, addedDate: r.added_date, notes: r.notes
+    id: r.id, name: r.name||"", gender: r.gender||"", nationality: r.nationality||"",
+    visaStatus: r.visa_status||"", visaExpiry: r.visa_expiry||"",
+    email: r.email||"", phone: r.phone||"", location: r.location||"",
+    desiredSalary: r.desired_salary||"", availability: r.availability||"",
+    noticePeriod: r.notice_period||"",
+    currentRole: r.job_title||"", currentCompany: r.current_company||"",
+    languages: parseJ(r.languages), skills: parseJ(r.skills),
+    softwareSkills: parseJ(r.software_skills), softSkills: parseJ(r.soft_skills),
+    education: parseJ(r.education), experience: parseJ(r.experience),
+    status: r.status||"New", source: r.source||"", addedDate: r.added_date||"", notes: r.notes||""
   }));
 }
 
@@ -505,6 +511,7 @@ function App(){
 
       {/* ── CLIENT CV ── */}
       {view==="cv"&&selected&&(()=>{
+        try {
         const s = {
           ...selected,
           name: s.name||"",
@@ -601,6 +608,13 @@ function App(){
           </div>
         </div>
         );
+        } catch(err) {
+          return <div style={{padding:40,color:"red",fontSize:14}}>
+            <div style={{fontWeight:700,marginBottom:10}}>CV Error (please screenshot this):</div>
+            <div>{err.message}</div>
+            <div style={{marginTop:10,fontSize:12,color:"#666"}}>{err.stack}</div>
+          </div>;
+        }
       })()}
 
       {/* ── CLIENTS LIST ── */}
