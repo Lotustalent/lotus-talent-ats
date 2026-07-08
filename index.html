@@ -139,14 +139,13 @@ function SH({title}){
   return <div style={{fontSize:11,fontWeight:800,color:T.indigo,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:`2px solid ${T.mist}`,paddingBottom:6,marginBottom:14,marginTop:20}}>{title}</div>;
 }
 
-const PROMPT=`Extract ALL candidate info from this CV and return ONLY a JSON object — no markdown, no explanation.
-Use this exact structure:
-{"name":"","gender":"","nationality":"","visaStatus":"","visaExpiry":"","email":"","phone":"","location":"","desiredSalary":"","availability":"","noticePeriod":"","currentRole":"","currentCompany":"","languages":[],"skills":[],"softwareSkills":[],"softSkills":[],"education":[{"degree":"","school":"","year":""}],"experience":[{"role":"","company":"","start":"","end":"","description":"","reasonLeaving":""}],"notes":""}
-For softwareSkills: extract specific tools, software, platforms (e.g. Python, Salesforce, SAP, Excel, Power BI).
-For softSkills: extract interpersonal/professional skills (e.g. stakeholder management, communication, leadership).
-For skills: leave empty — use softwareSkills and softSkills instead.
-For noticePeriod: extract notice period if mentioned (e.g. "1 month", "2 months", "Immediate").
-Return ONLY the JSON. Nothing else.`;
+const PROMPT = "Extract ALL candidate info from this CV and return ONLY a JSON object — no markdown, no explanation. " +
+  "Use this exact structure: " +
+  '{"name":"","gender":"","nationality":"","visaStatus":"","visaExpiry":"","email":"","phone":"","location":"","desiredSalary":"","availability":"","noticePeriod":"","currentRole":"","currentCompany":"","languages":[],"skills":[],"softwareSkills":[],"softSkills":[],"education":[{"degree":"","school":"","year":""}],"experience":[{"role":"","company":"","start":"","end":"","description":"","reasonLeaving":""}],"notes":""}' +
+  " For softwareSkills: extract specific tools, software, platforms (e.g. Python, Salesforce, SAP, Excel, Power BI). " +
+  " For softSkills: extract interpersonal/professional skills (e.g. stakeholder management, communication, leadership). " +
+  " For skills: leave empty. For noticePeriod: extract if mentioned (e.g. 1 month, 2 months, Immediate). " +
+  " Return ONLY the JSON. Nothing else.";
 
 const ALL_LANGUAGES = [
   "Japanese (Native)","Japanese (Business)","Japanese (Conversational)",
@@ -523,7 +522,7 @@ function App(){
             </div>
           </div>
           <div className="no-print" style={{background:T.mist,borderRadius:8,padding:"9px 14px",marginBottom:14,fontSize:12,color:T.slate}}>Print → "Save as PDF" to export.</div>
-          <div style={{background:T.white,borderRadius:10,boxShadow:"0 2px 20px rgba(0,0,0,0.1)",overflow:"hidden"}}>
+          <div id="client-cv" style={{background:T.white,borderRadius:10,boxShadow:"0 2px 20px rgba(0,0,0,0.1)",overflow:"hidden"}}>
             <div style={{background:T.navy,color:T.white,padding:"20px 30px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:40,height:40,background:T.vermil,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🪷</div>
