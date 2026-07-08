@@ -17,8 +17,8 @@
 const { useState, useRef, useEffect } = React;
 
 // ── SUPABASE CONFIG ──
-const SB_URL = "https://xctsvfqpetrsexftqegb.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhjdHN2ZnFwZXRyc2V4ZnRxZWdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTkyNTEsImV4cCI6MjA5ODI3NTI1MX0.bWX4N548C2JgkK_mdBsF_7lQbbKmc5olUd_NeqaTVDs";
+const SB_URL = "https://rebkbsubnlyskwgznatk.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlYmtic3Vibmx5c2t3Z3puYXRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTg4MzUsImV4cCI6MjA5ODI3NDgzNX0.kMXu1VyCcq6zaV6I8RwfoQa3t9nDTz6lHPtc1F9-Tdk";
 
 async function sbFetch(path, method = "GET", body = null, prefer = "return=representation") {
   const opts = { method, headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY, "Content-Type": "application/json", "Prefer": prefer } };
