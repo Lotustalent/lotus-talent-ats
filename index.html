@@ -80,6 +80,39 @@ async function loadClients() {
   }));
 }
 
+async function loadJobs() {
+  const rows = await sbFetch("jobs?order=created_at.desc");
+  return rows.map(r => ({
+    id: r.id, title: r.title, jobId: r.job_id,
+    clientId: r.client_id, clientName: r.client_name,
+    location: r.location, contractType: r.contract_type,
+    salaryMin: r.salary_min, salaryMax: r.salary_max,
+    benefits: r.benefits, targetStart: r.target_start,
+    languages: r.languages || [], description: r.description,
+    requirements: r.requirements, niceToHave: r.nice_to_have,
+    notes: r.notes, status: r.status || "Open",
+    dateOpened: r.date_opened, dateClosed: r.date_closed,
+    pipeline: r.pipeline || [],
+    createdAt: r.created_at
+  }));
+}
+
+async function saveJob(j) {
+  const row = {
+    id: j.id, title: j.title, job_id: j.jobId,
+    client_id: j.clientId, client_name: j.clientName,
+    location: j.location, contract_type: j.contractType,
+    salary_min: j.salaryMin, salary_max: j.salaryMax,
+    benefits: j.benefits, target_start: j.targetStart,
+    languages: j.languages || [], description: j.description,
+    requirements: j.requirements, nice_to_have: j.niceToHave,
+    notes: j.notes, status: j.status || "Open",
+    date_opened: j.dateOpened, date_closed: j.dateClosed,
+    pipeline: j.pipeline || []
+  };
+  await sbFetch("jobs?on_conflict=id", "POST", row, "resolution=merge-duplicates,return=representation");
+}
+
 async function saveClient(c) {
   const row = {
     id: c.id, company: c.company, industry: c.industry, origin: c.origin,
@@ -153,6 +186,33 @@ const PROMPT = "Extract ALL candidate info from this CV and return ONLY a JSON o
   " For skills: leave empty. For noticePeriod: extract if mentioned (e.g. 1 month, 2 months, Immediate). " +
   " Return ONLY the JSON. Nothing else.";
 
+
+const ALL_COUNTRIES = [
+  "Afghanistan","Albania","Algeria","Angola","Argentina","Armenia","Australia","Austria",
+  "Azerbaijan","Bangladesh","Belarus","Belgium","Benin","Bolivia","Bosnia and Herzegovina",
+  "Brazil","Bulgaria","Burkina Faso","Cambodia","Cameroon","Canada","Chile","China",
+  "Colombia","Congo","Croatia","Cuba","Czech Republic","Denmark","Dominican Republic",
+  "Ecuador","Egypt","El Salvador","Estonia","Ethiopia","Finland","France","Georgia",
+  "Germany","Ghana","Greece","Guatemala","Honduras","Hong Kong","Hungary","India",
+  "Indonesia","Iran","Iraq","Ireland","Israel","Italy","Ivory Coast","Japan","Jordan",
+  "Kazakhstan","Kenya","South Korea","North Korea","Kuwait","Kyrgyzstan","Latvia",
+  "Lebanon","Libya","Lithuania","Luxembourg","Malaysia","Mali","Mexico","Moldova",
+  "Mongolia","Morocco","Mozambique","Myanmar","Nepal","Netherlands","New Zealand",
+  "Nicaragua","Nigeria","Norway","Oman","Pakistan","Panama","Paraguay","Peru",
+  "Philippines","Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saudi Arabia",
+  "Senegal","Serbia","Singapore","Slovakia","Slovenia","Somalia","South Africa","Spain",
+  "Sri Lanka","Sudan","Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania",
+  "Thailand","Tunisia","Turkey","Turkmenistan","Uganda","Ukraine","United Arab Emirates",
+  "United Kingdom","United States","Uruguay","Uzbekistan","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"
+];
+
+const JOB_CANDIDATE_STATUSES = [
+  "Considering","Applied","Introduced to Client","Interview Scheduled",
+  "Interview Completed","Offer Made","Placed","On Hold","Rejected"
+];
+
+const JOB_STATUSES = ["Open","On Hold","Filled","Cancelled"];
+
 const ALL_LANGUAGES = [
   "Japanese (Native)","Japanese (Business)","Japanese (Conversational)",
   "Korean (Native)","Korean (Business)","Korean (Conversational)",
@@ -216,6 +276,11 @@ function App(){
   const [view,setView]=useState("candidates");
   const [candidates,setCandidates]=useState([]);
   const [clients,setClients]=useState([]);
+  const [jobs,setJobs]=useState([]);
+  const [selectedJob,setSelectedJob]=useState(null);
+  const [jobForm,setJobForm]=useState(null);
+  const [jobSearch,setJobSearch]=useState("");
+  const [jobStatusFilter,setJobStatusFilter]=useState("All");
   const [loading,setLoading]=useState(true);
   const [selected,setSelected]=useState(null);
   const [selectedClient,setSelectedClient]=useState(null);
@@ -232,8 +297,8 @@ function App(){
   const docRef=useRef();
 
   useEffect(()=>{
-    Promise.all([loadCandidates(),loadClients()])
-      .then(([c,cl])=>{setCandidates(c);setClients(cl);})
+    Promise.all([loadCandidates(),loadClients(),loadJobs()])
+      .then(([c,cl,j])=>{setCandidates(c);setClients(cl);setJobs(j);})
       .catch(e=>notify("Could not connect to database: "+e.message,"err"))
       .finally(()=>setLoading(false));
   },[]);
@@ -243,6 +308,7 @@ function App(){
   function setExp(i,k,v){setForm(f=>({...f,experience:f.experience.map((e,j)=>j===i?{...e,[k]:v}:e)}));}
   function setEdu(i,k,v){setForm(f=>({...f,education:f.education.map((e,j)=>j===i?{...e,[k]:v}:e)}));}
   function setCF(k,v){setClientForm(f=>({...f,[k]:v}));}
+  function setJF(k,v){setJobForm(f=>({...f,[k]:v}));}
 
   async function handleFile(file){
     if(!file)return;
@@ -305,6 +371,26 @@ function App(){
     finally{setSaving(false);}
   }
 
+  function generateJobId(clientName) {
+    const year = new Date().getFullYear();
+    const count = jobs.length + 1;
+    const prefix = (clientName||"LTC").substring(0,3).toUpperCase().replace(/[^A-Z]/g,"X");
+    return "LTC-" + year + "-" + String(count).padStart(3,"0");
+  }
+
+  async function handleSaveJob(){
+    if(!jobForm?.title){notify("Job title is required","err");return;}
+    if(!jobForm?.clientId){notify("Please link this job to a client","err");return;}
+    setSaving(true);
+    try{
+      await saveJob(jobForm);
+      setJobs(prev=>prev.find(j=>j.id===jobForm.id)?prev.map(j=>j.id===jobForm.id?jobForm:j):[jobForm,...prev]);
+      notify(jobForm.title+" saved");
+      setView("jobs");
+    }catch(err){notify("Save failed: "+err.message,"err");}
+    finally{setSaving(false);}
+  }
+
   async function handleSaveClient(){
     if(!clientForm?.company){notify("Company name is required","err");return;}
     setSaving(true);
@@ -349,7 +435,7 @@ function App(){
           </div>
         </div>
         <div style={{display:"flex",gap:6}}>
-          {[["candidates","📋 Candidates"],["clients","🏢 Clients"],["settings","⚙ Settings"]].map(([v,label])=>(
+          {[["candidates","📋 Candidates"],["jobs","💼 Jobs"],["clients","🏢 Clients"],["settings","⚙ Settings"]].map(([v,label])=>(
             <button key={v} onClick={()=>setView(v)} style={{background:view.startsWith(v.slice(0,6))?T.indigo:"transparent",color:T.white,border:"none",borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>{label}</button>
           ))}
         </div>
@@ -618,6 +704,269 @@ function App(){
         </div>
       )}
 
+            {/* ── JOBS LIST ── */}
+      {!loading&&view==="jobs"&&(
+        <div style={{padding:24,maxWidth:1080,margin:"0 auto"}}>
+          <div style={{display:"flex",gap:10,marginBottom:20,alignItems:"center",flexWrap:"wrap"}}>
+            <input value={jobSearch} onChange={e=>setJobSearch(e.target.value)} placeholder="Search jobs…"
+              style={{flex:1,minWidth:180,padding:"7px 12px",borderRadius:6,border:"1px solid #ede9e0",fontSize:13,outline:"none"}}/>
+            <select value={jobStatusFilter} onChange={e=>setJobStatusFilter(e.target.value)}
+              style={{padding:"7px 12px",borderRadius:6,border:"1px solid #ede9e0",fontSize:13,background:"#ffffff"}}>
+              <option>All</option>{JOB_STATUSES.map(s=><option key={s}>{s}</option>)}
+            </select>
+            <Btn onClick={()=>{
+              const id = "j"+Date.now().toString(36);
+              setJobForm({id,jobId:"LTC-"+new Date().getFullYear()+"-"+String(jobs.length+1).padStart(3,"0"),
+                status:"Open",dateOpened:today(),pipeline:[],languages:[],contractType:"Permanent"});
+              setView("editJob");
+            }}>+ Add Job</Btn>
+          </div>
+
+          <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+            {JOB_STATUSES.map(s=>{const n=jobs.filter(j=>j.status===s).length;return n>0?
+              <span key={s} style={{background:s==="Open"?"#e8f5ee":s==="Filled"?"#d4edda":s==="On Hold"?"#fef3e2":"#fde8e8",
+                color:s==="Open"?"#2a7d4f":s==="Filled"?"#155724":s==="On Hold"?"#8a5a00":"#7a1f1f",
+                borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>{s}: {n}</span>:null;})}
+          </div>
+
+          <div style={{background:"#ffffff",borderRadius:10,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{background:"#1a2744",color:"#ffffff"}}>
+                {["Job","Client","Location","Salary Range","Start Date","Pipeline","Status","Actions"].map(h=>(
+                  <th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {jobs.filter(j=>{
+                  const q=jobSearch.toLowerCase();
+                  return(!q||[j.title,j.clientName,j.location].some(v=>v?.toLowerCase().includes(q)))&&(jobStatusFilter==="All"||j.status===jobStatusFilter);
+                }).length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:"center",color:"#5a6480"}}>No jobs yet — add your first vacancy</td></tr>}
+                {jobs.filter(j=>{
+                  const q=jobSearch.toLowerCase();
+                  return(!q||[j.title,j.clientName,j.location].some(v=>v?.toLowerCase().includes(q)))&&(jobStatusFilter==="All"||j.status===jobStatusFilter);
+                }).map((j,i)=>{
+                  const placed=( j.pipeline||[]).filter(p=>p.status==="Placed").length;
+                  const total=(j.pipeline||[]).length;
+                  return(
+                  <tr key={j.id} style={{background:i%2===0?"#ffffff":"#f8f6f1",borderBottom:"1px solid #ede9e0"}}>
+                    <td style={{padding:"10px 14px"}}>
+                      <div style={{fontWeight:700,color:"#1a2744"}}>{j.title}</div>
+                      <div style={{fontSize:11,color:"#5a6480"}}>{j.jobId}</div>
+                    </td>
+                    <td style={{padding:"10px 14px"}}>{j.clientName||"—"}</td>
+                    <td style={{padding:"10px 14px"}}>{j.location||"—"}</td>
+                    <td style={{padding:"10px 14px",fontSize:12}}>
+                      {j.salaryMin||j.salaryMax?`€${j.salaryMin||"?"} – €${j.salaryMax||"?"}`:"—"}
+                    </td>
+                    <td style={{padding:"10px 14px",fontSize:12}}>{j.targetStart||"—"}</td>
+                    <td style={{padding:"10px 14px"}}>
+                      <div style={{fontSize:12,color:"#5a6480"}}>{total} candidate{total!==1?"s":""}</div>
+                      {placed>0&&<div style={{fontSize:11,color:"#2a7d4f",fontWeight:700}}>✓ {placed} placed</div>}
+                    </td>
+                    <td style={{padding:"10px 14px"}}>
+                      <span style={{background:j.status==="Open"?"#e8f5ee":j.status==="Filled"?"#d4edda":j.status==="On Hold"?"#fef3e2":"#fde8e8",
+                        color:j.status==="Open"?"#2a7d4f":j.status==="Filled"?"#155724":j.status==="On Hold"?"#8a5a00":"#7a1f1f",
+                        padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{j.status}</span>
+                    </td>
+                    <td style={{padding:"10px 14px"}}>
+                      <div style={{display:"flex",gap:6}}>
+                        <Btn small variant="ghost" onClick={()=>{setJobForm({...j});setView("editJob");}}>Edit</Btn>
+                        <Btn small onClick={()=>{setSelectedJob(j);setView("jobDetail");}}>View</Btn>
+                      </div>
+                    </td>
+                  </tr>
+                );})}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT JOB ── */}
+      {view==="editJob"&&jobForm&&(
+        <div style={{padding:24,maxWidth:900,margin:"0 auto"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+            <Btn variant="ghost" small onClick={()=>{setView("jobs");setJobForm(null);}}>← Back</Btn>
+            <h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#1a2744"}}>{jobForm.title?`Edit: ${jobForm.title}`:"New Job Vacancy"}</h2>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:800,color:"#2d4a8a",textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"2px solid #e8edf5",paddingBottom:6,marginBottom:14,marginTop:20}}>Job Information</div>
+              <Field label="Job Title *" value={jobForm.title} onChange={v=>setJF("title",v)} placeholder="e.g. Marketing Manager"/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Field label="Job ID" value={jobForm.jobId} onChange={v=>setJF("jobId",v)} placeholder="LTC-2026-001"/>
+                <Field label="Status" as="select" value={jobForm.status} onChange={v=>setJF("status",v)} options={JOB_STATUSES}/>
+              </div>
+              <Field label="Link to Client *" as="select" value={jobForm.clientId||""} onChange={v=>{
+                const cl=clients.find(c=>c.id===v);
+                setJobForm(f=>({...f,clientId:v,clientName:cl?cl.company:""}));
+              }} options={["-- Select Client --",...clients.map(c=>c.id)].map(id=>{
+                if(id==="-- Select Client --") return id;
+                const cl=clients.find(c=>c.id===id);
+                return cl?cl.company:id;
+              })}/>
+              <Field label="Location" value={jobForm.location} onChange={v=>setJF("location",v)} placeholder="Amsterdam"/>
+              <Field label="Contract Type" as="select" value={jobForm.contractType} onChange={v=>setJF("contractType",v)} options={["Permanent","Fixed Term","Freelance/ZZP","Internship"]}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Field label="Salary Min (€)" value={jobForm.salaryMin} onChange={v=>setJF("salaryMin",v)} placeholder="50000"/>
+                <Field label="Salary Max (€)" value={jobForm.salaryMax} onChange={v=>setJF("salaryMax",v)} placeholder="70000"/>
+              </div>
+              <Field label="Benefits" as="textarea" value={jobForm.benefits} onChange={v=>setJF("benefits",v)} placeholder={"Bonus scheme
+25 vacation days
+Pension
+Hybrid working"} rows={3}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Field label="Target Start Date" value={jobForm.targetStart} onChange={v=>setJF("targetStart",v)} placeholder="e.g. ASAP / 2026-10-01"/>
+                <Field label="Date Opened" type="date" value={jobForm.dateOpened} onChange={v=>setJF("dateOpened",v)}/>
+              </div>
+              {(jobForm.status==="Filled"||jobForm.status==="Cancelled")&&(
+                <Field label="Date Closed" type="date" value={jobForm.dateClosed} onChange={v=>setJF("dateClosed",v)}/>
+              )}
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:800,color:"#2d4a8a",textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"2px solid #e8edf5",paddingBottom:6,marginBottom:14,marginTop:20}}>Role Details</div>
+              <Field label="Language Requirements" as="textarea" value={jobForm.languages||""} onChange={v=>setJF("languages",v)} placeholder={"Japanese (Business Level)
+English (Fluent)"} rows={2}/>
+              <Field label="Job Description / Role Summary" as="textarea" value={jobForm.description} onChange={v=>setJF("description",v)} rows={4} placeholder="Overview of the role and responsibilities…"/>
+              <Field label="Requirements / Must-Haves" as="textarea" value={jobForm.requirements} onChange={v=>setJF("requirements",v)} rows={4} placeholder={"5+ years experience in…
+Fluent in Japanese
+Experience with…"}/>
+              <Field label="Nice to Have" as="textarea" value={jobForm.niceToHave} onChange={v=>setJF("niceToHave",v)} rows={3} placeholder="Additional desirable skills…"/>
+              <Field label="Internal Notes" as="textarea" value={jobForm.notes} onChange={v=>setJF("notes",v)} rows={3} placeholder="Client preferences, cultural notes, urgent timeline…"/>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20,paddingTop:16,borderTop:"1px solid #ede9e0"}}>
+            <Btn variant="ghost" onClick={()=>{setView("jobs");setJobForm(null);}}>Cancel</Btn>
+            <Btn variant="success" onClick={handleSaveJob} disabled={saving}>{saving?"Saving…":"Save Job"}</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── JOB DETAIL ── */}
+      {view==="jobDetail"&&selectedJob&&(()=>{
+        const job=jobs.find(j=>j.id===selectedJob.id)||selectedJob;
+        const pipeline=job.pipeline||[];
+        return(
+          <div style={{padding:24,maxWidth:960,margin:"0 auto"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+              <Btn variant="ghost" small onClick={()=>setView("jobs")}>← Back</Btn>
+              <h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#1a2744"}}>{job.title}</h2>
+              <span style={{background:job.status==="Open"?"#e8f5ee":job.status==="Filled"?"#d4edda":job.status==="On Hold"?"#fef3e2":"#fde8e8",
+                color:job.status==="Open"?"#2a7d4f":job.status==="Filled"?"#155724":job.status==="On Hold"?"#8a5a00":"#7a1f1f",
+                padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{job.status}</span>
+              <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+                <Btn small onClick={()=>{setJobForm({...job});setView("editJob");}}>Edit</Btn>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+              {/* Job Info */}
+              <div style={{background:"#ffffff",borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#2d4a8a",textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"2px solid #e8edf5",paddingBottom:6,marginBottom:14}}>Job Details</div>
+                {[["Job ID",job.jobId],["Client",job.clientName],["Location",job.location],["Contract",job.contractType],
+                  ["Salary Range",job.salaryMin||job.salaryMax?`€${job.salaryMin||"?"} – €${job.salaryMax||"?"} gross`:"—"],
+                  ["Target Start",job.targetStart],["Date Opened",job.dateOpened],["Date Closed",job.dateClosed||"—"]
+                ].filter(([,v])=>v).map(([l,v])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #ede9e0",fontSize:13}}>
+                    <span style={{color:"#5a6480",fontSize:12}}>{l}</span>
+                    <span style={{fontWeight:600}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Role Details */}
+              <div style={{background:"#ffffff",borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#2d4a8a",textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"2px solid #e8edf5",paddingBottom:6,marginBottom:14}}>Role Details</div>
+                {job.benefits&&<div style={{marginBottom:10}}><div style={{fontSize:11,color:"#5a6480",fontWeight:700,marginBottom:4}}>BENEFITS</div><div style={{fontSize:12,color:"#1a1a2e",whiteSpace:"pre-wrap"}}>{job.benefits}</div></div>}
+                {job.languages&&<div style={{marginBottom:10}}><div style={{fontSize:11,color:"#5a6480",fontWeight:700,marginBottom:4}}>LANGUAGES</div><div style={{fontSize:12,color:"#1a1a2e",whiteSpace:"pre-wrap"}}>{job.languages}</div></div>}
+                {job.requirements&&<div style={{marginBottom:10}}><div style={{fontSize:11,color:"#5a6480",fontWeight:700,marginBottom:4}}>REQUIREMENTS</div><div style={{fontSize:12,color:"#1a1a2e",whiteSpace:"pre-wrap"}}>{job.requirements}</div></div>}
+                {job.niceToHave&&<div style={{marginBottom:10}}><div style={{fontSize:11,color:"#5a6480",fontWeight:700,marginBottom:4}}>NICE TO HAVE</div><div style={{fontSize:12,color:"#1a1a2e",whiteSpace:"pre-wrap"}}>{job.niceToHave}</div></div>}
+                {job.notes&&<div><div style={{fontSize:11,color:"#5a6480",fontWeight:700,marginBottom:4}}>INTERNAL NOTES</div><div style={{fontSize:12,color:"#1a1a2e",whiteSpace:"pre-wrap"}}>{job.notes}</div></div>}
+              </div>
+            </div>
+
+            {/* Description */}
+            {job.description&&(
+              <div style={{background:"#ffffff",borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#2d4a8a",textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"2px solid #e8edf5",paddingBottom:6,marginBottom:12}}>Job Description</div>
+                <div style={{fontSize:13,color:"#1a1a2e",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{job.description}</div>
+              </div>
+            )}
+
+            {/* Candidate Pipeline */}
+            <div style={{background:"#ffffff",borderRadius:10,padding:20,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#2d4a8a",textTransform:"uppercase",letterSpacing:"0.1em"}}>👥 Candidate Pipeline</div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <select id="add-candidate-select" style={{padding:"6px 10px",borderRadius:6,border:"1px solid #ede9e0",fontSize:12,maxWidth:200}}>
+                    <option value="">— Add candidate —</option>
+                    {candidates.filter(c=>!pipeline.find(p=>p.candidateId===c.id)).map(c=>(
+                      <option key={c.id} value={c.id}>{c.name} ({c.currentRole||"No role"})</option>
+                    ))}
+                  </select>
+                  <Btn small onClick={async()=>{
+                    const sel=document.getElementById("add-candidate-select");
+                    const cid=sel?.value;
+                    if(!cid){notify("Select a candidate first","err");return;}
+                    const cand=candidates.find(c=>c.id===cid);
+                    if(!cand)return;
+                    const newEntry={candidateId:cid,candidateName:cand.name,status:"Considering",addedDate:today(),notes:""};
+                    const updatedJob={...job,pipeline:[...pipeline,newEntry]};
+                    setJobs(prev=>prev.map(j=>j.id===job.id?updatedJob:j));
+                    setSelectedJob(updatedJob);
+                    try{await saveJob(updatedJob);notify(cand.name+" added to pipeline");}
+                    catch(e){notify("Failed to save","err");}
+                    sel.value="";
+                  }}>+ Add</Btn>
+                </div>
+              </div>
+
+              {/* Pipeline status summary */}
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+                {JOB_CANDIDATE_STATUSES.map(s=>{
+                  const n=pipeline.filter(p=>p.status===s).length;
+                  return n>0?<span key={s} style={{background:"#e8edf5",color:"#2d4a8a",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600}}>{s}: {n}</span>:null;
+                })}
+              </div>
+
+              {pipeline.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:"#9aa3b8",fontSize:13}}>No candidates in pipeline yet — add candidates above</div>}
+
+              {pipeline.map((p,pi)=>(
+                <div key={p.candidateId} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,border:"1px solid #ede9e0",marginBottom:8,background:"#f8f6f1",flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontWeight:700,fontSize:13,color:"#1a2744"}}>{p.candidateName}</div>
+                    <div style={{fontSize:11,color:"#5a6480"}}>{p.addedDate}</div>
+                  </div>
+                  <select value={p.status} onChange={async e=>{
+                    const newStatus=e.target.value;
+                    const updatedPipeline=pipeline.map((pp,i)=>i===pi?{...pp,status:newStatus}:pp);
+                    const updatedJob={...job,pipeline:updatedPipeline};
+                    setJobs(prev=>prev.map(j=>j.id===job.id?updatedJob:j));
+                    setSelectedJob(updatedJob);
+                    try{await saveJob(updatedJob);}catch(e){}
+                  }} style={{padding:"4px 8px",borderRadius:6,border:"1px solid #ede9e0",fontSize:12,background:"#ffffff"}}>
+                    {JOB_CANDIDATE_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <input placeholder="Notes…" value={p.notes||""} onChange={e=>{
+                    const updatedPipeline=pipeline.map((pp,i)=>i===pi?{...pp,notes:e.target.value}:pp);
+                    const updatedJob={...job,pipeline:updatedPipeline};
+                    setJobs(prev=>prev.map(j=>j.id===job.id?updatedJob:j));
+                    setSelectedJob(updatedJob);
+                  }} onBlur={async()=>{try{await saveJob({...job,pipeline});}catch(e){}}}
+                  style={{flex:2,minWidth:120,padding:"4px 8px",borderRadius:6,border:"1px solid #ede9e0",fontSize:12}}/>
+                  <button onClick={async()=>{
+                    const updatedPipeline=pipeline.filter((_,i)=>i!==pi);
+                    const updatedJob={...job,pipeline:updatedPipeline};
+                    setJobs(prev=>prev.map(j=>j.id===job.id?updatedJob:j));
+                    setSelectedJob(updatedJob);
+                    try{await saveJob(updatedJob);notify("Candidate removed");}catch(e){}
+                  }} style={{background:"none",border:"none",cursor:"pointer",color:"#b5446e",fontSize:12}}>Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
             {/* ── CLIENTS LIST ── */}
       {!loading&&view==="clients"&&(
         <div style={{padding:24,maxWidth:1080,margin:"0 auto"}}>
@@ -669,7 +1018,7 @@ function App(){
               <Field label="Company Name *" value={clientForm.company} onChange={v=>setCF("company",v)}/>
               <Field label="Industry" value={clientForm.industry} onChange={v=>setCF("industry",v)} placeholder="Consumer Electronics, Trading…"/>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <Field label="Origin" as="select" value={clientForm.origin} onChange={v=>setCF("origin",v)} options={["Japanese","Korean","Chinese","Taiwanese","Other Asian"]}/>
+                <Field label="Origin / Country" as="select" value={clientForm.origin} onChange={v=>setCF("origin",v)} options={["Japanese","Korean","Chinese","Taiwanese","Singaporean","Indian","Vietnamese","Thai","Indonesian","Malaysian","Other Asian","Dutch","German","French","British","American","Belgian","Swedish","Swiss","Spanish","Italian","Polish","Other European","Other"]}/>
                 <Field label="HQ Country" value={clientForm.hqCountry} onChange={v=>setCF("hqCountry",v)} placeholder="Japan"/>
               </div>
               <Field label="Local Office (City)" value={clientForm.localOffice} onChange={v=>setCF("localOffice",v)} placeholder="Amsterdam"/>
