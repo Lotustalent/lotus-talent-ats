@@ -74,13 +74,13 @@ function Btn({children,onClick,v="primary",disabled,sm}){
 function F({label,value,onChange,type="text",ph,as="input",rows=3,opts}){
   const s={width:"100%",padding:"8px 12px",borderRadius:6,fontSize:13,color:T.ink,border:"1px solid "+T.sand,background:T.white,boxSizing:"border-box",fontFamily:"Inter,sans-serif",outline:"none",marginTop:4};
   return <div style={{marginBottom:12}}>
-    {label&&<label style={{fontSize:11,fontWeight:700,color:T.slate,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</label>}
+    {label&&<label style={{fontSize:11,fontWeight:700,color:T.slate,textTransform:"uppercase"}}>{label}</label>}
     {as==="textarea"&&<textarea value={value||""} rows={rows} placeholder={ph} onChange={e=>onChange(e.target.value)} style={{...s,resize:"vertical"}}/>}
     {as==="select"&&<select value={value||""} onChange={e=>onChange(e.target.value)} style={s}>{(opts||[]).map(o=><option key={o} value={o}>{o}</option>)}</select>}
     {as==="input"&&<input type={type} value={value||""} placeholder={ph} onChange={e=>onChange(e.target.value)} style={s}/>}
   </div>;
 }
-function SH({t}){return <div style={{fontSize:11,fontWeight:800,color:T.indigo,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"2px solid "+T.mist,paddingBottom:6,marginBottom:14,marginTop:20}}>{t}</div>;}
+function SH({t}){return <div style={{fontSize:11,fontWeight:800,color:T.indigo,textTransform:"uppercase",borderBottom:"2px solid "+T.mist,paddingBottom:4,marginBottom:12,marginTop:16}}>{t}</div>;}
 function App(){
   const [view,setView]=useState("cands");
   const [cands,setCands]=useState([]);
@@ -132,10 +132,7 @@ function App(){
         const ab=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsArrayBuffer(file);});
         const txt=(await mammoth.extractRawText({arrayBuffer:ab})).value;
         if(!txt||txt.length<50)throw new Error("Cannot read file");
-        const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:PROMPT+"
-
-CV TEXT:
-"+txt}]})});
+        const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:PROMPT+"\nCV TEXT:\n"+txt}]})});
         const d=await resp.json();
         if(d.error)throw new Error(d.error.message);
         extracted=JSON.parse((d.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
@@ -437,7 +434,7 @@ CV TEXT:
             <F label="Status" as="select" value={jForm.status} onChange={v=>sJF("status",v)} opts={Object.keys(JSTATUS)}/>
           </div>
           <div style={{marginBottom:12}}>
-            <label style={{fontSize:11,fontWeight:700,color:T.slate,textTransform:"uppercase",letterSpacing:"0.06em"}}>LINK TO CLIENT</label>
+            <label style={{fontSize:11,fontWeight:700,color:T.slate,textTransform:"uppercase"}}>LINK TO CLIENT</label>
             <select value={jForm.clientId||""} onChange={e=>{const cl=clients.find(c=>c.id===e.target.value);sJF("clientId",e.target.value);sJF("clientName",cl?cl.company:"");}} style={{width:"100%",padding:"8px 12px",borderRadius:6,fontSize:13,border:"1px solid "+T.sand,background:T.white,marginTop:4}}>
               <option value="">-- Select Client --</option>
               {clients.map(c=><option key={c.id} value={c.id}>{c.company}</option>)}
@@ -640,26 +637,14 @@ CV TEXT:
       <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
         <SH t="Export"/>
         <div style={{display:"flex",gap:10}}>
-          <Btn onClick={()=>{const h=["ID","Name","Gender","Nationality","Visa","Salary","Available","Role","Company","Status","Added"];const rows=cands.map(c=>[c.id,c.name,c.gender,c.nationality,c.visaStatus,c.desiredSalary,c.availability,c.currentRole,c.currentCompany,c.status,c.addedDate].map(v=>'"'+(v||"").replace(/"/g,'""')+'"'));const csv=[h,...rows].map(r=>r.join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="candidates.csv";a.click();}}>⬇ Candidates</Btn>
-          <Btn v="ghost" onClick={()=>{const h=["ID","Company","Origin","Contact","Fee","Status"];const rows=clients.map(c=>[c.id,c.company,c.origin,c.contactName,c.feeAgreed,c.status].map(v=>'"'+(v||"").replace(/"/g,'""')+'"'));const csv=[h,...rows].map(r=>r.join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="clients.csv";a.click();}}>⬇ Clients</Btn>
+<Btn onClick={()=>{const h=["ID","Name","Nationality","Role","Company","Status"];const rows=cands.map(c=>[c.id,c.name,c.nationality,c.currentRole,c.currentCompany,c.status]);const csv=[h,...rows].map(r=>r.map(v=>JSON.stringify(v||"")).join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="candidates.csv";a.click();}}>⬇ Candidates</Btn>
+<Btn v="ghost" onClick={()=>{const h=["ID","Company","Origin","Contact","Fee","Status"];const rows=clients.map(c=>[c.id,c.company,c.origin,c.contactName,c.feeAgreed,c.status]);const csv=[h,...rows].map(r=>r.map(v=>JSON.stringify(v||"")).join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="clients.csv";a.click();}}>⬇ Clients</Btn>
         </div>
       </div>
     </div>}
   </div>;
 }
-class ErrorBoundary extends React.Component {
-  constructor(props){super(props);this.state={error:null};}
-  componentDidCatch(e){this.setState({error:e.message+"
-"+e.stack});}
-  render(){
-    if(this.state.error)return <div style={{padding:20,color:"red",fontSize:13,whiteSpace:"pre-wrap",background:"#fff"}}>
-      <strong>Error:</strong>{"
-"}{this.state.error}
-    </div>;
-    return this.props.children;
-  }
-}
-ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
