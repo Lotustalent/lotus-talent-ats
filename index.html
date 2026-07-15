@@ -57,10 +57,8 @@ async function saveJ(j){
 const PROMPT="Extract ALL candidate info from this CV and return ONLY a JSON object. Use this structure: {name:'',gender:'',nationality:'',visaStatus:'',visaExpiry:'',email:'',phone:'',location:'',desiredSalary:'',availability:'',noticePeriod:'',currentRole:'',currentCompany:'',languages:[],skills:[],softwareSkills:[],softSkills:[],education:[{degree:'',school:'',year:''}],experience:[{role:'',company:'',start:'',end:'',description:'',reasonLeaving:''}],notes:''} For softwareSkills: tools/software. For softSkills: interpersonal skills. Return ONLY JSON.";
 async function rewrite(exp,key){
   if(!key||!exp||!exp.length)return exp;
-  const txt=exp.map((e,i)=>"Role "+i+": "+e.role+" at "+e.company+". "+( e.description||"")).join("
-");
-  const prompt="Rewrite these job descriptions into 3-5 bullet points each starting with action verbs. Return ONLY JSON array: [{index:0,bullets:['...',...]},...]  Descriptions:
-"+txt;
+  const txt=exp.map((e,i)=>"Role "+i+": "+e.role+" at "+e.company+". "+( e.description||"")).join("\n");
+  const prompt="Rewrite these job descriptions into 3-5 bullet points each starting with action verbs. Return ONLY JSON array: [{index:0,bullets:['...',...]},...]  Descriptions:\n"+txt;
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:prompt}]})});
   const d=await r.json();
   if(d.error)return exp;
@@ -316,13 +314,9 @@ CV TEXT:
             {LANGS.map(l=>{const sel=(form.languages||[]).includes(l);return <button key={l} onClick={()=>sF("languages",sel?(form.languages||[]).filter(x=>x!==l):[...(form.languages||[]),l])} style={{padding:"3px 8px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid "+(sel?"#2d4a8a":T.sand),background:sel?"#2d4a8a":T.white,color:sel?T.white:T.slate}}>{l}</button>;})}
           </div>
           <SH t="Software Skills"/>
-          <F label="Tools (one per line)" as="textarea" value={(form.softwareSkills||[]).join("
-")} onChange={v=>sF("softwareSkills",v.split("
-").filter(Boolean))} rows={3}/>
+          <F label="Tools (one per line)" as="textarea" value={(form.softwareSkills||[]).join("\n")} onChange={v=>sF("softwareSkills",v.split("\n").filter(Boolean))} rows={3}/>
           <SH t="Soft Skills"/>
-          <F label="Soft skills (one per line)" as="textarea" value={(form.softSkills||[]).join("
-")} onChange={v=>sF("softSkills",v.split("
-").filter(Boolean))} rows={2}/>
+          <F label="Soft skills (one per line)" as="textarea" value={(form.softSkills||[]).join("\n")} onChange={v=>sF("softSkills",v.split("\n").filter(Boolean))} rows={2}/>
           <SH t="Education"/>
           {(form.education||[]).map((e,i)=><div key={i} style={{background:T.mist,borderRadius:8,padding:12,marginBottom:8}}>
             <F label="Degree" value={e.degree} onChange={v=>sEd(i,"degree",v)}/>
@@ -646,10 +640,8 @@ CV TEXT:
       <div style={{background:T.white,borderRadius:10,padding:22,boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
         <SH t="Export"/>
         <div style={{display:"flex",gap:10}}>
-          <Btn onClick={()=>{const h=["ID","Name","Gender","Nationality","Visa","Salary","Available","Role","Company","Status","Added"];const rows=cands.map(c=>[c.id,c.name,c.gender,c.nationality,c.visaStatus,c.desiredSalary,c.availability,c.currentRole,c.currentCompany,c.status,c.addedDate].map(v=>'"'+(v||"").replace(/"/g,'""')+'"'));const csv=[h,...rows].map(r=>r.join(",")).join("
-");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="candidates.csv";a.click();}}>⬇ Candidates</Btn>
-          <Btn v="ghost" onClick={()=>{const h=["ID","Company","Origin","Contact","Fee","Status"];const rows=clients.map(c=>[c.id,c.company,c.origin,c.contactName,c.feeAgreed,c.status].map(v=>'"'+(v||"").replace(/"/g,'""')+'"'));const csv=[h,...rows].map(r=>r.join(",")).join("
-");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="clients.csv";a.click();}}>⬇ Clients</Btn>
+          <Btn onClick={()=>{const h=["ID","Name","Gender","Nationality","Visa","Salary","Available","Role","Company","Status","Added"];const rows=cands.map(c=>[c.id,c.name,c.gender,c.nationality,c.visaStatus,c.desiredSalary,c.availability,c.currentRole,c.currentCompany,c.status,c.addedDate].map(v=>'"'+(v||"").replace(/"/g,'""')+'"'));const csv=[h,...rows].map(r=>r.join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="candidates.csv";a.click();}}>⬇ Candidates</Btn>
+          <Btn v="ghost" onClick={()=>{const h=["ID","Company","Origin","Contact","Fee","Status"];const rows=clients.map(c=>[c.id,c.company,c.origin,c.contactName,c.feeAgreed,c.status].map(v=>'"'+(v||"").replace(/"/g,'""')+'"'));const csv=[h,...rows].map(r=>r.join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="clients.csv";a.click();}}>⬇ Clients</Btn>
         </div>
       </div>
     </div>}
